@@ -1,6 +1,6 @@
 .PHONY: all clean distclean
 
-TARGET = ping
+TARGET = ft_ping
 
 SRC = $(addprefix src/,ping.c)
 
