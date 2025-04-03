@@ -29,10 +29,11 @@
 typedef struct ping_s {
     int				 fd;
     int				 type;
-    int	 ident;
+    int				 ident;
     host			*dest;
+    unsigned char	*data;
     size_t			 datalen;
-    int			 options;
+    int				 options;
 } ping;
 
 static ping* ping_init(int ident) {
@@ -77,13 +78,17 @@ close_return:
 static int ping_echo(ping * p, char *host) {
     int ret = 0;
 
+    /* Initialize message specific elements */
     p->type = ICMP_ECHO;
     p->datalen = PING_DATALEN;
+    /* p->data; */
     p->dest = ping_get_host(host);
     if (p->dest == NULL) {
-        return -1;
+        ret = -1;
+        goto exit_clean_data;
     }
 
+    /* Print the ping data */
     printf ("PING %s (%s): %zu data bytes", p->dest->name,
             inet_ntoa(p->dest->addr.sin_addr), p->datalen);
     if (p->options & OPT_VERBOSE) {
@@ -93,6 +98,8 @@ static int ping_echo(ping * p, char *host) {
 
     free(p->dest->name);
     free(p->dest);
+exit_clean_data:
+    free(p->data);
     return ret;
 }
 
@@ -134,5 +141,6 @@ int main(int argc, char** argv) {
 
     close(p->fd);
     free(p);
+    ping_clean_data();
     return EXIT_SUCCESS;
 }

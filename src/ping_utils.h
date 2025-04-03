@@ -9,5 +9,7 @@ typedef struct host_s {
 } host;
 
 host  * ping_get_host(char *hostname);
+unsigned char * ping_generate_data(unsigned char * pat, size_t len);
+void ping_clean_data();
 
 #endif
