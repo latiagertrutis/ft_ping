@@ -1,4 +1,4 @@
-#include <asm-generic/socket.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -8,6 +8,8 @@
 #include <errno.h>
 #include <string.h>
 
+#include "ping_utils.h"
+
 #define HELP_STRING \
 "Usage: ft_ping [OPTION...] HOST ...\n" \
 "Send ICMP ECHO_REQUEST packets to network hosts.\n" \
@@ -16,11 +18,13 @@
 "  -v                 verbose output\n" \
 "  -?                 give this help list\n"
 
-struct ping_s {
-    int fd;
-};
+#define ICMP_ECHO		8
 
-typedef struct ping_s ping;
+typedef struct ping_s {
+    int fd;
+    int type;
+    host *dest;
+} ping;
 
 static ping* ping_init() {
     int fd;
@@ -59,6 +63,23 @@ close_return:
     return NULL;
 }
 
+static int ping_echo(ping * p, char *host) {
+    int ret = 0;
+
+    p->type = ICMP_ECHO;
+    p->dest = ping_get_host(host);
+    if (p->dest == NULL) {
+        ret = -1;
+        goto exit_clean;
+    }
+
+    printf("ADDR NAME IS: %s\n", p->dest->name);
+
+exit_clean:
+    free(p->dest);
+    return ret;
+}
+
 int main(int argc, char** argv) {
     int c;
     bool verbose = false;
@@ -72,7 +93,7 @@ int main(int argc, char** argv) {
 
         case '?':
             printf(HELP_STRING);
-            break;
+            exit(EXIT_SUCCESS);
         }
     }
 
@@ -80,6 +101,12 @@ int main(int argc, char** argv) {
     if (p == NULL) {
         perror("ping_init");
         exit (EXIT_FAILURE);
+    }
+
+    for (; optind < argc; optind++) {
+        if (ping_echo(p, argv[optind]) != 0) {
+            perror("ping_echo");
+        }
     }
 
     close(p->fd);
