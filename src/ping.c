@@ -29,13 +29,13 @@
 typedef struct ping_s {
     int				 fd;
     int				 type;
-    unsigned short	 ident;
+    int	 ident;
     host			*dest;
     size_t			 datalen;
-    char			 options;
+    int			 options;
 } ping;
 
-static ping* ping_init(unsigned short ident) {
+static ping* ping_init(int ident) {
     int				 fd;
     struct protoent *proto;
     ping			*p	 = NULL;
@@ -65,7 +65,7 @@ static ping* ping_init(unsigned short ident) {
     memset(p, 0, sizeof(ping));
 
     p->fd = fd;
-    p->ident = ident;
+    p->ident = ident & 0xFFFF;
 
     return p;
 
@@ -81,25 +81,24 @@ static int ping_echo(ping * p, char *host) {
     p->datalen = PING_DATALEN;
     p->dest = ping_get_host(host);
     if (p->dest == NULL) {
-        ret = -1;
-        goto exit_clean;
+        return -1;
     }
 
     printf ("PING %s (%s): %zu data bytes", p->dest->name,
             inet_ntoa(p->dest->addr.sin_addr), p->datalen);
     if (p->options & OPT_VERBOSE) {
-        printf (", id 0x%04x = %u", p->ident, p->ident);
+        printf(", id 0x%04x = %u", p->ident, p->ident);
     }
     printf ("\n");
 
-exit_clean:
+    free(p->dest->name);
     free(p->dest);
     return ret;
 }
 
 int main(int argc, char** argv) {
     int c;
-    bool verbose;
+    bool verbose = false;
     ping *p;
 
     while ((c = getopt(argc, argv, "v?")) != -1) {
@@ -122,7 +121,9 @@ int main(int argc, char** argv) {
     }
 
     /* Write the options into the ping structure */
-    p->options |= verbose ? OPT_VERBOSE : 0x00;
+    if (verbose) {
+        p->options |= OPT_VERBOSE;
+    }
 
     /* Loop through all the hosts */
     for (; optind < argc; optind++) {
