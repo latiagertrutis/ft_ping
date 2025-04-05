@@ -6,6 +6,8 @@ SRC = $(addprefix src/,ping.c ping_utils.c)
 OBJ = $(SRC:.c=.o)
 DEP = $(SRC:.c=.d)
 
+CFLAGS = -g
+
 CC = gcc
 
 all: $(TARGET)

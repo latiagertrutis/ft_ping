@@ -1,4 +1,5 @@
 #include <netinet/in.h>
+#include <netinet/ip_icmp.h>
 #include <arpa/inet.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -19,21 +20,25 @@
 "  -v                 verbose output\n" \
 "  -?                 give this help list\n"
 
-#define ICMP_ECHO		8
-#define PING_HEADER_LEN 8
-#define PING_DATALEN	(64 - PING_HEADER_LEN)	/* default data length */
+#define PING_DATALEN	(64 - sizeof(struct icmphdr))
+
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 /* Ping options */
 #define OPT_VERBOSE 0x01
 
+typedef struct ping_pkt_s {
+    struct icmphdr hdr;
+    unsigned char data[PING_DATALEN];
+} ping_pkt;
+
 typedef struct ping_s {
-    int				 fd;
-    int				 type;
-    int				 ident;
-    host			*dest;
-    unsigned char	*data;
-    size_t			 datalen;
-    int				 options;
+    int			 fd;
+    int			 type;
+    int			 ident;
+    host		*dest;
+    ping_pkt	 pkt;
+    int			 options;
 } ping;
 
 static ping* ping_init(int ident) {
@@ -80,17 +85,15 @@ static int ping_echo(ping * p, char *host) {
 
     /* Initialize message specific elements */
     p->type = ICMP_ECHO;
-    p->datalen = PING_DATALEN;
     /* p->data; */
     p->dest = ping_get_host(host);
     if (p->dest == NULL) {
-        ret = -1;
-        goto exit_clean_data;
+        return -1;
     }
 
     /* Print the ping data */
     printf ("PING %s (%s): %zu data bytes", p->dest->name,
-            inet_ntoa(p->dest->addr.sin_addr), p->datalen);
+            inet_ntoa(p->dest->addr.sin_addr), ARRAY_SIZE(p->pkt.data));
     if (p->options & OPT_VERBOSE) {
         printf(", id 0x%04x = %u", p->ident, p->ident);
     }
@@ -98,8 +101,6 @@ static int ping_echo(ping * p, char *host) {
 
     free(p->dest->name);
     free(p->dest);
-exit_clean_data:
-    free(p->data);
     return ret;
 }
 
@@ -141,6 +142,5 @@ int main(int argc, char** argv) {
 
     close(p->fd);
     free(p);
-    ping_clean_data();
     return EXIT_SUCCESS;
 }
