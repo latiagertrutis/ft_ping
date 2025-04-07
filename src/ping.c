@@ -1,3 +1,4 @@
+#include <asm-generic/errno-base.h>
 #include <netinet/in.h>
 #include <netinet/ip_icmp.h>
 #include <arpa/inet.h>
@@ -35,11 +36,12 @@ typedef struct ping_pkt_s {
 } ping_pkt;
 
 typedef struct ping_s {
-    int			 fd;
-    int			 id;
-    host		*dest;
-    ping_pkt	 pkt;
-    int			 options;
+    int					 fd;
+    int					 id;
+    host				*dest;
+    struct sockaddr_in	 from;
+    ping_pkt			 pkt;
+    int					 options;
 } ping;
 
 static ping* ping_init(int ident) {
@@ -99,6 +101,7 @@ static void ping_create_package(ping *p) {
 static int ping_echo(ping * p, char *host) {
     int ret = 0;
     ssize_t bytes;
+    bool done;
 
     ping_create_package(p);
     p->dest = ping_get_host(host);
@@ -114,12 +117,40 @@ static int ping_echo(ping * p, char *host) {
     }
     printf ("\n");
 
-    bytes = sendto(p->fd, &p->pkt, sizeof(ping_pkt), 0,
-                   (struct sockaddr *)&p->dest->addr, sizeof(struct sockaddr_in));
-    if (bytes < 0) {
-        ret = -1;
-        goto exit_clean;
-    }
+    done = false;
+    do {
+        socklen_t fromlen = sizeof(struct sockaddr_in);
+
+        if (sendto(p->fd, &p->pkt, sizeof(ping_pkt), 0,
+                   (struct sockaddr *)&p->dest->addr,
+                   sizeof(struct sockaddr_in)) < 0) {
+            ret = -1;
+            done = true;
+            continue;
+        }
+
+        bytes = recvfrom(p->fd, &p->pkt, sizeof(ping_pkt), 0,
+                         (struct sockaddr *)&p->from, &fromlen);
+        if (bytes <= 0) {
+            /* In case bytes == 0 peer closed connection, which should not happen */
+            ret = -1;
+            done = true;
+            continue;
+        }
+
+        /* Received bytes should at least be equal to the packet size */
+        if (bytes < sizeof(ping_pkt)) {
+            errno = ERANGE;
+            ret = -1;
+            done = true;
+            continue;
+        }
+
+        printf("Received message of size %ld, a ping packet is size %ld\n", bytes, sizeof(ping_pkt));
+        done = true; // TODO: fix me
+        /* TODO: continue here, with the DGRAM socket we will not receive the IP header as opposed to RAW socket. Next steps: validate received message and finish the loop. */
+
+    } while (!done);
 
 exit_clean:
     free(p->dest->name);
