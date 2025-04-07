@@ -10,5 +10,6 @@ typedef struct host_s {
 
 host  * ping_get_host(char *hostname);
 unsigned char * ping_generate_data(unsigned char * pat, unsigned char *data, size_t len);
+uint16_t ping_calc_icmp_checksum(uint16_t *pkt, size_t len);
 
 #endif

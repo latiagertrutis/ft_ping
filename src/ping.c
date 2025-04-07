@@ -1,8 +1,10 @@
 #include <netinet/in.h>
 #include <netinet/ip_icmp.h>
 #include <arpa/inet.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -34,8 +36,7 @@ typedef struct ping_pkt_s {
 
 typedef struct ping_s {
     int			 fd;
-    int			 type;
-    int			 ident;
+    int			 id;
     host		*dest;
     ping_pkt	 pkt;
     int			 options;
@@ -71,7 +72,7 @@ static ping* ping_init(int ident) {
     memset(p, 0, sizeof(ping));
 
     p->fd = fd;
-    p->ident = ident & 0xFFFF;
+    p->id = ident & 0xFFFF;
 
     return p;
 
@@ -80,12 +81,26 @@ close_return:
     return NULL;
 }
 
+/* Initializes ping packet with a icmp echo message */
+static void ping_create_package(ping *p) {
+    ping_pkt *pkt = &p->pkt;
+
+    /* Reset the package */
+    memset(pkt, 0, sizeof(ping_pkt));
+
+    pkt->hdr.type = ICMP_ECHO;
+    pkt->hdr.un.echo.id = p->id;
+    pkt->hdr.un.echo.sequence = 0;
+    ping_generate_data(NULL, pkt->data, ARRAY_SIZE(pkt->data));
+    /* Last since all data must be set unless checksum which must be all 0 */
+    pkt->hdr.checksum = ping_calc_icmp_checksum((uint16_t *)pkt, sizeof(ping_pkt));
+}
+
 static int ping_echo(ping * p, char *host) {
     int ret = 0;
+    ssize_t bytes;
 
-    /* Initialize message specific elements */
-    p->type = ICMP_ECHO;
-    /* p->data; */
+    ping_create_package(p);
     p->dest = ping_get_host(host);
     if (p->dest == NULL) {
         return -1;
@@ -95,10 +110,18 @@ static int ping_echo(ping * p, char *host) {
     printf ("PING %s (%s): %zu data bytes", p->dest->name,
             inet_ntoa(p->dest->addr.sin_addr), ARRAY_SIZE(p->pkt.data));
     if (p->options & OPT_VERBOSE) {
-        printf(", id 0x%04x = %u", p->ident, p->ident);
+        printf(", id 0x%04x = %u", p->id, p->id);
     }
     printf ("\n");
 
+    bytes = sendto(p->fd, &p->pkt, sizeof(ping_pkt), 0,
+                   (struct sockaddr *)&p->dest->addr, sizeof(struct sockaddr_in));
+    if (bytes < 0) {
+        ret = -1;
+        goto exit_clean;
+    }
+
+exit_clean:
     free(p->dest->name);
     free(p->dest);
     return ret;

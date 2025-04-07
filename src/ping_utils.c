@@ -1,4 +1,6 @@
 #include <netdb.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -61,4 +63,25 @@ unsigned char * ping_generate_data(unsigned char * pat, unsigned char *data, siz
     }
 
     return data;
+}
+
+/* RFC 792: The checksum is the 16-bit ones's complement of the one's complement
+ * sum of the ICMP message starting with the ICMP Type. For computing the
+ * checksum , the checksum field should be zero. */
+uint16_t ping_calc_icmp_checksum(uint16_t *pkt, size_t len) {
+    uint32_t sum = 0;
+    uint16_t *pkt_p = pkt;
+
+    for (; len > 1; len -= 2) {
+        sum += *pkt_p;
+    }
+
+    if (len == 1) {
+        sum += *(uint8_t *)pkt;
+    }
+
+    sum = (sum >> 16) + (sum & 0xffff);	/* First fold */
+    sum += (sum >> 16); /* Add carry if any */
+
+    return ~sum;
 }
