@@ -131,7 +131,7 @@ static void ping_create_package(ping *p) {
     pkt->hdr.checksum = ping_calc_icmp_checksum((uint16_t *)pkt, sizeof(ping_pkt));
 }
 
-static bool ping_verify_recv_pkg(uint8_t *data, size_t len, bool is_dgram) {
+static bool ping_validate_icmp_pkg(uint8_t *data, size_t len, uint16_t id, bool is_dgram) {
     size_t hlen = 0;
     ping_pkt *pkt;
     uint16_t chksum;
@@ -147,6 +147,14 @@ static bool ping_verify_recv_pkg(uint8_t *data, size_t len, bool is_dgram) {
     }
 
     pkt = (ping_pkt *)(data + hlen);
+
+    /* Validate identity (only raw mode) */
+    if (!is_dgram && (ntohs(pkt->hdr.un.echo.id) != id)) {
+        printf("Wrong id, rcv[%d], local[%d]\n", ntohs(pkt->hdr.un.echo.id), id);
+        return false;
+    }
+
+    /* TODO: continue here, validate sequence and increment it in the ping structure */
 
     /* Validate checksum */
     chksum = pkt->hdr.checksum;
@@ -206,7 +214,7 @@ static int ping_echo(ping * p, char *host) {
             continue;
         }
 
-        if (!ping_verify_recv_pkg(recv_buff, bytes, p->is_dgram)) {
+        if (!ping_validate_icmp_pkg(recv_buff, bytes, p->id, p->is_dgram)) {
             errno = EBADMSG;
             ret = -1;
             done = true;
