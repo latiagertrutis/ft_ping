@@ -1,6 +1,7 @@
 #include <netdb.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -72,7 +73,7 @@ uint16_t ping_calc_icmp_checksum(uint16_t *pkt, size_t len) {
     uint32_t sum = 0;
     uint16_t *pkt_p = pkt;
 
-    for (; len > 1; len -= 2) {
+    for (; len > 1; pkt_p++, len -= 2) {
         sum += *pkt_p;
     }
 
@@ -82,6 +83,8 @@ uint16_t ping_calc_icmp_checksum(uint16_t *pkt, size_t len) {
 
     sum = (sum >> 16) + (sum & 0xffff);	/* First fold */
     sum += (sum >> 16); /* Add carry if any */
+
+    printf("Calculated: %X\n", ~sum);
 
     return ~sum;
 }

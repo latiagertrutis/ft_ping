@@ -1,7 +1,7 @@
-#include <asm-generic/errno-base.h>
 #include <netinet/in.h>
 #include <netinet/ip_icmp.h>
 #include <arpa/inet.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -27,6 +27,14 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
+#ifndef IP_HDRLEN_MAX
+/* According to the RFC 791, section 3.1, the header length is 4 bits that
+ * encodes the length of the header in 32 bit words. So the maximum header
+ * lenght is 0xF (max value of 4 bits) times 4 (<< 2) to translate from
+ * 32-bit words to the usual 8-bit words. */
+#define IP_HDRLEN_MAX (0xF << 2)
+#endif
+
 /* Ping options */
 #define OPT_VERBOSE 0x01
 
@@ -37,6 +45,7 @@ typedef struct ping_pkt_s {
 
 typedef struct ping_s {
     int					 fd;
+    bool				 is_dgram;
     int					 id;
     host				*dest;
     struct sockaddr_in	 from;
@@ -44,22 +53,45 @@ typedef struct ping_s {
     int					 options;
 } ping;
 
+/* TODO: remove */
+void print_bytes_hex(const uint8_t *data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        printf("%02X ", data[i]);													 // Uppercase hex, 2 digits padded with zero
+    }
+    printf("\n");
+}
+
 static ping* ping_init(int ident) {
     int				 fd;
     struct protoent *proto;
     ping			*p	 = NULL;
     int				 one = 1;
+    bool is_dgram = false;
 
-    proto = getprotobyname("icmp");
+    proto	  = getprotobyname("icmp");
     if (proto == NULL) {
         /* errno is not set by getprotobyname() */
         errno = ENOPROTOOPT;
         return NULL;
     }
 
-    fd = socket(AF_INET, SOCK_DGRAM, proto->p_proto);
+    /* Note: If we use SOCK_DGRAM for the socket the kernel will automatically
+     * handle IP layer headers, and may also override parts of the ICMP header
+     * such as indentifier and sequence. If full control is wanted SOCK_RAW
+     * must be used, which will require to give network capabilities to the
+     * binary */
+    fd = socket(AF_INET, SOCK_RAW, proto->p_proto);
     if (fd < 0) {
-        return NULL;
+        if (errno != EPERM && errno != EACCES) {
+            return NULL;
+        }
+
+        errno = 0;
+        fd	  = socket(AF_INET, SOCK_DGRAM, proto->p_proto);
+        if (fd < 0) {
+            return NULL;
+        }
+        is_dgram = true;
     }
 
     /* Ping may need to talk with a broadcast address */
@@ -75,6 +107,7 @@ static ping* ping_init(int ident) {
 
     p->fd = fd;
     p->id = ident & 0xFFFF;
+    p->is_dgram = is_dgram;
 
     return p;
 
@@ -91,11 +124,39 @@ static void ping_create_package(ping *p) {
     memset(pkt, 0, sizeof(ping_pkt));
 
     pkt->hdr.type = ICMP_ECHO;
-    pkt->hdr.un.echo.id = p->id;
-    pkt->hdr.un.echo.sequence = 0;
+    pkt->hdr.un.echo.id = htons(p->id);
+    pkt->hdr.un.echo.sequence = htons(0); //todo: add sequence number
     ping_generate_data(NULL, pkt->data, ARRAY_SIZE(pkt->data));
     /* Last since all data must be set unless checksum which must be all 0 */
     pkt->hdr.checksum = ping_calc_icmp_checksum((uint16_t *)pkt, sizeof(ping_pkt));
+}
+
+static bool ping_verify_recv_pkg(uint8_t *data, size_t len, bool is_dgram) {
+    size_t hlen = 0;
+    ping_pkt *pkt;
+    uint16_t chksum;
+
+    if (!is_dgram) {
+        /* Translate 32-bit words to 8-bit (RFC791, 3.1) */
+        hlen = ((struct ip *)data)->ip_hl << 2;
+    }
+
+    /* Received bytes should at least be equal to the packet size */
+    if (len < hlen + sizeof(ping_pkt)) {
+        return false;
+    }
+
+    pkt = (ping_pkt *)(data + hlen);
+
+    /* Validate checksum */
+    chksum = pkt->hdr.checksum;
+    pkt->hdr.checksum = 0;
+    pkt->hdr.checksum = ping_calc_icmp_checksum((uint16_t *)pkt, len - hlen);
+    if (pkt->hdr.checksum != chksum) {
+        return false;
+    }
+
+    return true;
 }
 
 static int ping_echo(ping * p, char *host) {
@@ -120,8 +181,11 @@ static int ping_echo(ping * p, char *host) {
     done = false;
     do {
         socklen_t fromlen = sizeof(struct sockaddr_in);
+        ping_pkt *pkt = &p->pkt;
+        uint8_t recv_buff[IP_HDRLEN_MAX + sizeof(ping_pkt)];
+        uint16_t chksum;
 
-        if (sendto(p->fd, &p->pkt, sizeof(ping_pkt), 0,
+        if (sendto(p->fd, pkt, sizeof(ping_pkt), 0,
                    (struct sockaddr *)&p->dest->addr,
                    sizeof(struct sockaddr_in)) < 0) {
             ret = -1;
@@ -129,7 +193,11 @@ static int ping_echo(ping * p, char *host) {
             continue;
         }
 
-        bytes = recvfrom(p->fd, &p->pkt, sizeof(ping_pkt), 0,
+        printf("Sent message:\n");
+        print_bytes_hex((const uint8_t *)&p->pkt, sizeof(ping_pkt));
+
+
+        bytes = recvfrom(p->fd, recv_buff, ARRAY_SIZE(recv_buff), 0,
                          (struct sockaddr *)&p->from, &fromlen);
         if (bytes <= 0) {
             /* In case bytes == 0 peer closed connection, which should not happen */
@@ -138,15 +206,15 @@ static int ping_echo(ping * p, char *host) {
             continue;
         }
 
-        /* Received bytes should at least be equal to the packet size */
-        if (bytes < sizeof(ping_pkt)) {
-            errno = ERANGE;
+        if (!ping_verify_recv_pkg(recv_buff, bytes, p->is_dgram)) {
+            errno = EBADMSG;
             ret = -1;
             done = true;
             continue;
         }
 
-        printf("Received message of size %ld, a ping packet is size %ld\n", bytes, sizeof(ping_pkt));
+        printf("Received message:\n");
+        print_bytes_hex((const uint8_t *)recv_buff, bytes);
         done = true; // TODO: fix me
         /* TODO: continue here, with the DGRAM socket we will not receive the IP header as opposed to RAW socket. Next steps: validate received message and finish the loop. */
 

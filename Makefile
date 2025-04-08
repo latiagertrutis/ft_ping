@@ -14,6 +14,9 @@ all: $(TARGET)
 
 $(TARGET): $(OBJ)
 	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
+ifdef USE_RAW_SOCKET
+	sudo setcap cap_net_raw=ep $@
+endif
 
 %.d: %.c
 	@set -e; rm -f $@; \
