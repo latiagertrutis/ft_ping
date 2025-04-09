@@ -128,17 +128,15 @@ static void ping_create_package(ping *p) {
 
     pkt->hdr.type = ICMP_ECHO;
     pkt->hdr.un.echo.id = htons(p->id);
-    pkt->hdr.un.echo.sequence = htons(0); //todo: add sequence number
+    pkt->hdr.un.echo.sequence = htons(p->num_sent); //todo: add sequence number
     ping_generate_data(NULL, pkt->data, ARRAY_SIZE(pkt->data));
     /* Last since all data must be set unless checksum which must be all 0 */
     pkt->hdr.checksum = ping_calc_icmp_checksum((uint16_t *)pkt, sizeof(ping_pkt));
 }
 
-static bool ping_validate_icmp_pkg(ping *p, uint8_t *data, size_t len) {
+static bool ping_validate_icmp_pkg(ping *p, uint8_t *data, size_t len, ping_pkt **pkt) {
     size_t hlen = 0;
-    ping_pkt *pkt;
     uint16_t chksum;
-    uint16_t seq;
 
     if (!p->is_dgram) {
         /* Translate 32-bit words to 8-bit (RFC791, 3.1) */
@@ -150,19 +148,63 @@ static bool ping_validate_icmp_pkg(ping *p, uint8_t *data, size_t len) {
         return false;
     }
 
-    pkt = (ping_pkt *)(data + hlen);
+    *pkt = (ping_pkt *)(data + hlen);
 
     /* Validate checksum */
-    chksum = pkt->hdr.checksum;
-    pkt->hdr.checksum = 0;
-    pkt->hdr.checksum = ping_calc_icmp_checksum((uint16_t *)pkt, len - hlen);
-    if (pkt->hdr.checksum != chksum) {
+    chksum = (*pkt)->hdr.checksum;
+    (*pkt)->hdr.checksum = 0;
+    (*pkt)->hdr.checksum = ping_calc_icmp_checksum((uint16_t *)*pkt, len - hlen);
+    if ((*pkt)->hdr.checksum != chksum) {
         return false;
+    }
+
+    return true;
+}
+
+static ssize_t ping_send(ping *p) {
+    ping_pkt *pkt = &p->pkt;
+    ssize_t bytes = 0;
+
+    ping_create_package(p);
+
+    bytes = sendto(p->fd, pkt, sizeof(ping_pkt), 0,
+                   (struct sockaddr *)&p->dest->addr,
+                   sizeof(struct sockaddr_in));
+    if ( bytes < 0) {
+        return -1;
+    }
+
+    p->num_sent++;
+
+    /* TODO: remove */
+    printf("Sent message:\n");
+    print_bytes_hex((const uint8_t *)&p->pkt, sizeof(ping_pkt));
+
+    return bytes;
+}
+
+static ssize_t ping_recv(ping *p) {
+    ssize_t bytes = 0;
+    uint8_t recv_buff[IP_HDRLEN_MAX + sizeof(ping_pkt)];
+    socklen_t fromlen = sizeof(struct sockaddr_in);
+    ping_pkt *pkt;
+    uint16_t seq;
+
+    bytes = recvfrom(p->fd, recv_buff, ARRAY_SIZE(recv_buff), 0,
+                     (struct sockaddr *)&p->from, &fromlen);
+    if (bytes <= 0) {
+        /* In case bytes == 0 peer closed connection, which should not happen */
+        return -1;
+    }
+
+    if (!ping_validate_icmp_pkg(p, recv_buff, bytes, &pkt)) {
+        goto exit_badmsg;
     }
 
     /* Validate identity (only raw mode) */
     if (!p->is_dgram && (ntohs(pkt->hdr.un.echo.id) != p->id)) {
-        return false;
+        printf("Error id recv [%X], local [%X]\n", ntohs(pkt->hdr.un.echo.id), p->id);
+        goto exit_badmsg;
     }
 
     /* Validate sequence number, should be one less than the messages transmitted */
@@ -171,13 +213,23 @@ static bool ping_validate_icmp_pkg(ping *p, uint8_t *data, size_t len) {
         /* If it is a previous message mark a duplication */
         if (seq < p->num_sent - 1) {
             p->num_dup++;
-            return true;
+        } else {
+            printf("Error sequence [%d]\n", seq);
+            goto exit_badmsg;
         }
-        return false;
+    } else {
+        p->num_recv++;
     }
-    p->num_recv++;
 
-    return true;
+    /* TODO: Remove */
+    printf("Received message:\n");
+    print_bytes_hex((const uint8_t *)recv_buff, bytes);
+
+    return bytes;
+
+exit_badmsg:
+    errno = EBADMSG;
+    return -1;
 }
 
 static int ping_echo(ping * p, char *host) {
@@ -185,7 +237,6 @@ static int ping_echo(ping * p, char *host) {
     ssize_t bytes;
     bool done;
 
-    ping_create_package(p);
     p->dest = ping_get_host(host);
     if (p->dest == NULL) {
         return -1;
@@ -201,45 +252,22 @@ static int ping_echo(ping * p, char *host) {
 
     done = false;
     do {
-        socklen_t fromlen = sizeof(struct sockaddr_in);
-        ping_pkt *pkt = &p->pkt;
-        uint8_t recv_buff[IP_HDRLEN_MAX + sizeof(ping_pkt)];
         uint16_t chksum;
 
-        if (sendto(p->fd, pkt, sizeof(ping_pkt), 0,
-                   (struct sockaddr *)&p->dest->addr,
-                   sizeof(struct sockaddr_in)) < 0) {
-            ret = -1;
-            done = true;
-            continue;
-        }
-        p->num_sent++;
-
-        printf("Sent message:\n");
-        print_bytes_hex((const uint8_t *)&p->pkt, sizeof(ping_pkt));
-
-
-        bytes = recvfrom(p->fd, recv_buff, ARRAY_SIZE(recv_buff), 0,
-                         (struct sockaddr *)&p->from, &fromlen);
-        if (bytes <= 0) {
-            /* In case bytes == 0 peer closed connection, which should not happen */
+        if (ping_send(p) < 0) {
             ret = -1;
             done = true;
             continue;
         }
 
-        if (!ping_validate_icmp_pkg(p, recv_buff, bytes)) {
-            errno = EBADMSG;
+
+        if (ping_recv(p) < 0) {
             ret = -1;
             done = true;
             continue;
         }
 
-        printf("Received message:\n");
-        print_bytes_hex((const uint8_t *)recv_buff, bytes);
         done = true; // TODO: fix me
-        /* TODO: continue here, with the DGRAM socket we will not receive the IP header as opposed to RAW socket. Next steps: validate received message and finish the loop. */
-
     } while (!done);
 
 exit_clean:
