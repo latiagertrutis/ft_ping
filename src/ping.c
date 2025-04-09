@@ -50,6 +50,9 @@ typedef struct ping_s {
     host				*dest;
     struct sockaddr_in	 from;
     ping_pkt			 pkt;
+    size_t				 num_sent;
+    size_t				 num_recv;
+    size_t				 num_dup;
     int					 options;
 } ping;
 
@@ -131,12 +134,13 @@ static void ping_create_package(ping *p) {
     pkt->hdr.checksum = ping_calc_icmp_checksum((uint16_t *)pkt, sizeof(ping_pkt));
 }
 
-static bool ping_validate_icmp_pkg(uint8_t *data, size_t len, uint16_t id, bool is_dgram) {
+static bool ping_validate_icmp_pkg(ping *p, uint8_t *data, size_t len) {
     size_t hlen = 0;
     ping_pkt *pkt;
     uint16_t chksum;
+    uint16_t seq;
 
-    if (!is_dgram) {
+    if (!p->is_dgram) {
         /* Translate 32-bit words to 8-bit (RFC791, 3.1) */
         hlen = ((struct ip *)data)->ip_hl << 2;
     }
@@ -148,14 +152,6 @@ static bool ping_validate_icmp_pkg(uint8_t *data, size_t len, uint16_t id, bool 
 
     pkt = (ping_pkt *)(data + hlen);
 
-    /* Validate identity (only raw mode) */
-    if (!is_dgram && (ntohs(pkt->hdr.un.echo.id) != id)) {
-        printf("Wrong id, rcv[%d], local[%d]\n", ntohs(pkt->hdr.un.echo.id), id);
-        return false;
-    }
-
-    /* TODO: continue here, validate sequence and increment it in the ping structure */
-
     /* Validate checksum */
     chksum = pkt->hdr.checksum;
     pkt->hdr.checksum = 0;
@@ -163,6 +159,23 @@ static bool ping_validate_icmp_pkg(uint8_t *data, size_t len, uint16_t id, bool 
     if (pkt->hdr.checksum != chksum) {
         return false;
     }
+
+    /* Validate identity (only raw mode) */
+    if (!p->is_dgram && (ntohs(pkt->hdr.un.echo.id) != p->id)) {
+        return false;
+    }
+
+    /* Validate sequence number, should be one less than the messages transmitted */
+    seq = ntohs(pkt->hdr.un.echo.sequence);
+    if (seq != p->num_sent - 1) {
+        /* If it is a previous message mark a duplication */
+        if (seq < p->num_sent - 1) {
+            p->num_dup++;
+            return true;
+        }
+        return false;
+    }
+    p->num_recv++;
 
     return true;
 }
@@ -200,6 +213,7 @@ static int ping_echo(ping * p, char *host) {
             done = true;
             continue;
         }
+        p->num_sent++;
 
         printf("Sent message:\n");
         print_bytes_hex((const uint8_t *)&p->pkt, sizeof(ping_pkt));
@@ -214,7 +228,7 @@ static int ping_echo(ping * p, char *host) {
             continue;
         }
 
-        if (!ping_validate_icmp_pkg(recv_buff, bytes, p->id, p->is_dgram)) {
+        if (!ping_validate_icmp_pkg(p, recv_buff, bytes)) {
             errno = EBADMSG;
             ret = -1;
             done = true;
