@@ -29,5 +29,8 @@ include $(DEP)
 clean:
 	@rm -f $(OBJ) $(DEP)
 
+re: clean
+	@$(MAKE) all
+
 distclean: clean
 	@rm -f $(TARGET)

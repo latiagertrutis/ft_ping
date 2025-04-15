@@ -4,8 +4,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "ping_utils.h"
+
+#define PING_NSEC_PER_SEC 1000000000
 
 host * ping_get_host(char *hostname) {
     host * h = NULL;
@@ -87,4 +90,48 @@ uint16_t ping_calc_icmp_checksum(uint16_t *pkt, size_t len) {
     printf("Calculated: %X\n", ~sum);
 
     return ~sum;
+}
+
+int timespec_to_ms(struct timespec ts) {
+    return (ts.tv_sec * 1000) + (ts.tv_nsec / 1000000);
+}
+
+struct timespec ms_to_timespec(int ms) {
+    return (struct timespec) {
+        .tv_sec  = (ms / 1000),
+        .tv_nsec = (ms % 1000) * 1000000,
+    };
+}
+
+struct timespec timespec_substract(struct timespec last, struct timespec now) {
+    return (struct timespec) {
+        .tv_sec = last.tv_sec - now.tv_sec,
+        .tv_nsec = last.tv_nsec - now.tv_nsec,
+    };
+}
+
+struct timespec timespec_add(struct timespec last, struct timespec now) {
+    return (struct timespec) {
+        .tv_sec = last.tv_sec + now.tv_sec,
+        .tv_nsec = last.tv_nsec + now.tv_nsec,
+    };
+}
+
+struct timespec timespec_normalise(struct timespec ts) {
+
+    while(ts.tv_nsec < 0) {
+        ts.tv_sec--;
+        ts.tv_nsec += PING_NSEC_PER_SEC;
+    }
+
+    while(ts.tv_nsec >= PING_NSEC_PER_SEC) {
+        ts.tv_sec++;
+        ts.tv_nsec -= PING_NSEC_PER_SEC;
+    }
+
+    if(ts.tv_sec < 0) {
+        ts.tv_sec = ts.tv_nsec = 0;
+    }
+
+    return ts;
 }

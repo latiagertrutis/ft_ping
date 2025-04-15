@@ -4,14 +4,17 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <netdb.h>
 #include <errno.h>
 #include <string.h>
+#include <poll.h>
 
 #include "ping_utils.h"
 
@@ -21,9 +24,14 @@
 "\n" \
 "Options:\n" \
 "  -v                 verbose output\n" \
+"  -i <interval>      interval in seconds between ping messages [default 1s]\n" \
+"  -c <count>         number of messages to send, 0 is infinity [default 0]\n" \
 "  -?                 give this help list\n"
 
 #define PING_DATALEN	(64 - sizeof(struct icmphdr))
+#define PING_DEFAULT_INTERVAL 1000      /* Milliseconds */
+#define PING_MS_PER_SEC 1000     /* Millisecond precision */
+#define PING_MAX_WAIT (10 * PING_MS_PER_SEC)
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -50,9 +58,10 @@ typedef struct ping_s {
     host				*dest;
     struct sockaddr_in	 from;
     ping_pkt			 pkt;
+    size_t				 interval;
+    size_t				 count;
     size_t				 num_sent;
     size_t				 num_recv;
-    size_t				 num_dup;
     int					 options;
 } ping;
 
@@ -209,17 +218,13 @@ static ssize_t ping_recv(ping *p) {
 
     /* Validate sequence number, should be one less than the messages transmitted */
     seq = ntohs(pkt->hdr.un.echo.sequence);
-    if (seq != p->num_sent - 1) {
-        /* If it is a previous message mark a duplication */
-        if (seq < p->num_sent - 1) {
-            p->num_dup++;
-        } else {
-            printf("Error sequence [%d]\n", seq);
-            goto exit_badmsg;
-        }
-    } else {
-        p->num_recv++;
+    /* TODO: Handle duplicates? */
+    if (seq >= p->num_sent) {
+        printf("Error sequence [%d]\n", seq);
+        goto exit_badmsg;
     }
+
+    p->num_recv++;
 
     /* TODO: Remove */
     printf("Received message:\n");
@@ -232,15 +237,21 @@ exit_badmsg:
     return -1;
 }
 
-static int ping_echo(ping * p, char *host) {
+static int ping_run(ping * p, char *host) {
     int ret = 0;
     ssize_t bytes;
+    int wait;
     bool done;
+    bool finishing;
+    struct pollfd pfd;
 
     p->dest = ping_get_host(host);
     if (p->dest == NULL) {
         return -1;
     }
+
+    pfd.fd = p->fd;
+    pfd.events = POLLIN;
 
     /* Print the ping data */
     printf ("PING %s (%s): %zu data bytes", p->dest->name,
@@ -250,25 +261,51 @@ static int ping_echo(ping * p, char *host) {
     }
     printf ("\n");
 
+    if (ping_send(p) < 0) {
+        ret = -1;
+        goto exit_clean;
+    }
+
     done = false;
-    do {
+    finishing = false;
+    wait = p->interval;
+    while (!done) {
         uint16_t chksum;
+        int pret;
 
-        if (ping_send(p) < 0) {
+        pret = poll(&pfd, 1, wait);
+        if (pret < 0) {
             ret = -1;
             done = true;
             continue;
         }
 
+        if (pret > 0) {
+            if (ping_recv(p) < 0) {
+                ret = -1;
+                done = true;
+                continue;
+            }
 
-        if (ping_recv(p) < 0) {
-            ret = -1;
-            done = true;
-            continue;
+            if (p->num_recv >= p->count) {
+                done = true;
+            }
+
+        } else {
+            if (p->count == 0 || p->num_sent < p->count) {
+                if (ping_send(p) < 0) {
+                    ret = -1;
+                    done = true;
+                    continue;
+                }
+            } else if (finishing) {
+                done = true;
+            } else {
+                finishing = true;
+                wait = PING_MAX_WAIT;
+            }
         }
-
-        done = true; // TODO: fix me
-    } while (!done);
+    }
 
 exit_clean:
     free(p->dest->name);
@@ -279,12 +316,23 @@ exit_clean:
 int main(int argc, char** argv) {
     int c;
     bool verbose = false;
+    size_t interval = PING_DEFAULT_INTERVAL;
+    size_t count = 0;
     ping *p;
 
-    while ((c = getopt(argc, argv, "v?")) != -1) {
+    while ((c = getopt(argc, argv, "vi:c:?")) != -1) {
         switch (c) {
         case 'v':
             verbose = true;
+            break;
+
+        case 'i':
+            /* TODO: Use float */
+            interval = atol(optarg) * PING_MS_PER_SEC;
+            break;
+
+        case 'c':
+            count = atol(optarg);
             break;
 
         case '?':
@@ -304,10 +352,12 @@ int main(int argc, char** argv) {
     if (verbose) {
         p->options |= OPT_VERBOSE;
     }
+    p->interval = interval;
+    p->count = count;
 
     /* Loop through all the hosts */
     for (; optind < argc; optind++) {
-        if (ping_echo(p, argv[optind]) != 0) {
+        if (ping_run(p, argv[optind]) != 0) {
             perror("ping_echo");
         }
     }
