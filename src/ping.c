@@ -192,12 +192,37 @@ static ssize_t ping_send(ping *p) {
     return bytes;
 }
 
+/* NOTE: The inetutils-2.0 does not take into consideration if the socket is
+ * DGRAM or RAW at the moment of assigning the ip header when decoding the
+ * message. This makes that if the socket is DGRAM the ip header will be
+ * pointing to the start of the icmp header, thus making the ttl and other
+ * data being random numbers. This I understand is just made as undefined
+ * behavior, and I preferred to set ttl to 0 instead. */
+void ping_print_echo(struct sockaddr_in *from, struct ip *ip, struct icmphdr * icmp, int len) {
+    bool timing = false;
+    double triptime = 0.0;
+    uint8_t ttl = 0;
+
+    if (ip != NULL) {
+        ttl = ip->ip_ttl;
+        len  = len - (ip->ip_hl << 2);
+    }
+
+    printf ("%d bytes from %s: icmp_seq=%u", len,
+            inet_ntoa (*(struct in_addr *) &from->sin_addr.s_addr),
+            ntohs (icmp->un.echo.sequence));
+    printf (" ttl=%d", ttl);
+    if (timing)
+        printf (" time=%.3f ms", triptime);
+}
+
 static ssize_t ping_recv(ping *p) {
     ssize_t bytes = 0;
     uint8_t recv_buff[IP_HDRLEN_MAX + sizeof(ping_pkt)];
     socklen_t fromlen = sizeof(struct sockaddr_in);
     ping_pkt *pkt;
     uint16_t seq;
+    struct ip *ip = NULL;
 
     bytes = recvfrom(p->fd, recv_buff, ARRAY_SIZE(recv_buff), 0,
                      (struct sockaddr *)&p->from, &fromlen);
@@ -226,9 +251,10 @@ static ssize_t ping_recv(ping *p) {
 
     p->num_recv++;
 
-    /* TODO: Remove */
-    printf("Received message:\n");
-    print_bytes_hex((const uint8_t *)recv_buff, bytes);
+    if (p->is_dgram == false) {
+        ip = (struct ip*)recv_buff;
+    }
+    ping_print_echo(&p->from, ip, &pkt->hdr, bytes);
 
     return bytes;
 
