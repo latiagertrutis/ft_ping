@@ -15,20 +15,21 @@
 #include <errno.h>
 #include <string.h>
 #include <poll.h>
+#include <math.h>
 
 #include "ping_utils.h"
 
 #define HELP_STRING \
-"Usage: ft_ping [OPTION...] HOST ...\n" \
-"Send ICMP ECHO_REQUEST packets to network hosts.\n" \
-"\n" \
-"Options:\n" \
-"  -v                 verbose output\n" \
-"  -i <interval>      interval in seconds between ping messages [default 1s]\n" \
-"  -c <count>         number of messages to send, 0 is infinity [default 0]\n" \
-"  -?                 give this help list\n"
+    "Usage: ft_ping [OPTION...] HOST ...\n" \
+    "Send ICMP ECHO_REQUEST packets to network hosts.\n" \
+    "\n" \
+    "Options:\n" \
+    "  -v                 verbose output\n" \
+    "  -i <interval>      interval in seconds between ping messages [default 1s]\n" \
+    "  -c <count>         number of messages to send, 0 is infinity [default 0]\n" \
+    "  -?                 give this help list\n"
 
-#define PING_DATALEN	(64 - sizeof(struct icmphdr))
+#define PING_DATALEN    (64 - sizeof(struct icmphdr))
 #define PING_DEFAULT_INTERVAL 1000      /* Milliseconds */
 #define PING_MS_PER_SEC 1000     /* Millisecond precision */
 #define PING_MAX_WAIT (10 * PING_MS_PER_SEC)
@@ -51,36 +52,40 @@ typedef struct ping_pkt_s {
     unsigned char data[PING_DATALEN];
 } ping_pkt;
 
+typedef struct ping_stat_s {
+    double tmin;                  /* minimum round trip time */
+    double tmax;                  /* maximum round trip time */
+    double tsum;                  /* sum of all times, for doing average */
+    double tsumsq;                /* sum of all times squared, for std. dev. */
+} ping_stat;
+
+
 typedef struct ping_s {
-    int					 fd;
-    bool				 is_dgram;
-    int					 id;
-    host				*dest;
-    struct sockaddr_in	 from;
-    ping_pkt			 pkt;
-    size_t				 interval;
-    size_t				 count;
-    size_t				 num_sent;
-    size_t				 num_recv;
-    int					 options;
+    int                  fd;
+    bool                 is_dgram;
+    int                  id;
+    host                *dest;
+    struct sockaddr_in   from;
+    ping_pkt             pkt;
+    ping_stat stat;
+    uint8_t             *seq_map;
+    size_t               interval;
+    size_t               count;
+    size_t               num_sent;
+    size_t               num_recv;
+    size_t               num_dup;
+    int                  options;
 } ping;
 
-/* TODO: remove */
-void print_bytes_hex(const uint8_t *data, size_t len) {
-    for (size_t i = 0; i < len; i++) {
-        printf("%02X ", data[i]);													 // Uppercase hex, 2 digits padded with zero
-    }
-    printf("\n");
-}
-
-static ping* ping_init(int ident) {
-    int				 fd;
+static ping *ping_init(int ident)
+{
+    int              fd;
     struct protoent *proto;
-    ping			*p	 = NULL;
-    int				 one = 1;
+    ping            *p   = NULL;
+    int              one = 1;
     bool is_dgram = false;
 
-    proto	  = getprotobyname("icmp");
+    proto     = getprotobyname("icmp");
     if (proto == NULL) {
         /* errno is not set by getprotobyname() */
         errno = ENOPROTOOPT;
@@ -99,7 +104,7 @@ static ping* ping_init(int ident) {
         }
 
         errno = 0;
-        fd	  = socket(AF_INET, SOCK_DGRAM, proto->p_proto);
+        fd    = socket(AF_INET, SOCK_DGRAM, proto->p_proto);
         if (fd < 0) {
             return NULL;
         }
@@ -128,8 +133,96 @@ close_return:
     return NULL;
 }
 
+/*
+ * NOTE: The inetutils-2.0 does not take into consideration if the socket is
+ * DGRAM or RAW at the moment of assigning the ip header when decoding the
+ * message. This makes that if the socket is DGRAM the ip header will be
+ * pointing to the start of the icmp header, thus making the ttl and other
+ * data being random numbers. This I understand is just made as undefined
+ * behavior, and I preferred to set ttl to 0 instead.
+ */
+static void ping_print_echo(struct sockaddr_in *from, struct ip *ip, ping_stat *stat,
+                            ping_pkt *pkt, int len)
+{
+    bool timing = false;
+    double triptime = 0.0;
+    uint8_t ttl = 0;
+
+    if (ip != NULL) {
+        ttl = ip->ip_ttl;
+        len  = len - (ip->ip_hl << 2);
+    }
+
+    if (len - sizeof(struct icmphdr) >= sizeof(struct timespec)) {
+        struct timespec now, before;
+
+        timing = true;
+
+        clock_gettime(CLOCK_MONOTONIC, &now);
+
+        /* Copy to avoid missalignement */
+        memcpy(&before, pkt->data, sizeof(struct timespec));
+        triptime = timespec_to_ms(timespec_substract(now, before));
+
+        /* Update statistics */
+        stat->tsum += triptime;
+        stat->tsumsq += triptime * triptime;
+        if (triptime < stat->tmin) {
+            stat->tmin = triptime;
+        }
+        if (triptime > stat->tmax) {
+            stat->tmax = triptime;
+        }
+    }
+
+    printf ("%d bytes from %s: icmp_seq=%u", len,
+            inet_ntoa (*(struct in_addr*) &from->sin_addr.s_addr),
+            ntohs (pkt->hdr.un.echo.sequence));
+    printf (" ttl=%d", ttl);
+    if (timing) {
+        printf (" time=%.3f ms", triptime);
+    }
+
+    /* TODO: print duplicates */
+
+    printf ("\n");
+}
+
+static void ping_print_stat(ping *p)
+{
+    fflush (stdout);
+    printf ("--- %s ping statistics ---\n", p->dest->name);
+    printf ("%zu packets transmitted, ", p->num_sent);
+    printf ("%zu packets received, ", p->num_recv);
+
+    /* TODO: handle duplicates */
+    /* if (ping->ping_num_rept) */
+    /*     printf ("+%zu duplicates, ", ping->ping_num_rept); */
+    if (p->num_sent) {
+        if (p->num_recv > p->num_sent) {
+            printf ("-- somebody is printing forged packets!");
+        }
+        else {
+            printf ("%d%% packet loss",
+                    (int) (((p->num_sent - p->num_recv) * 100) / p->num_sent));
+        }
+    }
+    printf ("\n");
+
+    if (p->num_recv && ARRAY_SIZE(p->pkt.data) >= sizeof(struct timespec)) {
+        double total = p->num_recv; // TODO: manage duplicates: + ping->ping_num_rept;
+        double avg = p->stat.tsum / total;
+        double vari = p->stat.tsumsq / total - avg * avg;
+
+        printf ("round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms\n",
+                p->stat.tmin, avg, p->stat.tmax, nsqrt (vari, 0.0005));
+    }
+}
+
+
 /* Initializes ping packet with a icmp echo message */
-static void ping_create_package(ping *p) {
+static void ping_create_package(ping *p)
+{
     ping_pkt *pkt = &p->pkt;
 
     /* Reset the package */
@@ -140,16 +233,17 @@ static void ping_create_package(ping *p) {
     pkt->hdr.un.echo.sequence = htons(p->num_sent); //todo: add sequence number
     ping_generate_data(NULL, pkt->data, ARRAY_SIZE(pkt->data));
     /* Last since all data must be set unless checksum which must be all 0 */
-    pkt->hdr.checksum = ping_calc_icmp_checksum((uint16_t *)pkt, sizeof(ping_pkt));
+    pkt->hdr.checksum = ping_calc_icmp_checksum((uint16_t*)pkt, sizeof(ping_pkt));
 }
 
-static bool ping_validate_icmp_pkg(ping *p, uint8_t *data, size_t len, ping_pkt **pkt) {
+static bool ping_validate_icmp_pkg(ping *p, uint8_t* data, size_t len, ping_pkt** pkt)
+{
     size_t hlen = 0;
     uint16_t chksum;
 
     if (!p->is_dgram) {
         /* Translate 32-bit words to 8-bit (RFC791, 3.1) */
-        hlen = ((struct ip *)data)->ip_hl << 2;
+        hlen = ((struct ip*)data)->ip_hl << 2;
     }
 
     /* Received bytes should at least be equal to the packet size */
@@ -157,12 +251,12 @@ static bool ping_validate_icmp_pkg(ping *p, uint8_t *data, size_t len, ping_pkt 
         return false;
     }
 
-    *pkt = (ping_pkt *)(data + hlen);
+    *pkt = (ping_pkt*)(data + hlen);
 
     /* Validate checksum */
     chksum = (*pkt)->hdr.checksum;
     (*pkt)->hdr.checksum = 0;
-    (*pkt)->hdr.checksum = ping_calc_icmp_checksum((uint16_t *)*pkt, len - hlen);
+    (*pkt)->hdr.checksum = ping_calc_icmp_checksum((uint16_t*)*pkt, len - hlen);
     if ((*pkt)->hdr.checksum != chksum) {
         return false;
     }
@@ -170,14 +264,15 @@ static bool ping_validate_icmp_pkg(ping *p, uint8_t *data, size_t len, ping_pkt 
     return true;
 }
 
-static ssize_t ping_send(ping *p) {
+static ssize_t ping_send(ping *p)
+{
     ping_pkt *pkt = &p->pkt;
     ssize_t bytes = 0;
 
     ping_create_package(p);
 
     bytes = sendto(p->fd, pkt, sizeof(ping_pkt), 0,
-                   (struct sockaddr *)&p->dest->addr,
+                   (struct sockaddr*)&p->dest->addr,
                    sizeof(struct sockaddr_in));
     if ( bytes < 0) {
         return -1;
@@ -185,38 +280,11 @@ static ssize_t ping_send(ping *p) {
 
     p->num_sent++;
 
-    /* TODO: remove */
-    printf("Sent message:\n");
-    print_bytes_hex((const uint8_t *)&p->pkt, sizeof(ping_pkt));
-
     return bytes;
 }
 
-/* NOTE: The inetutils-2.0 does not take into consideration if the socket is
- * DGRAM or RAW at the moment of assigning the ip header when decoding the
- * message. This makes that if the socket is DGRAM the ip header will be
- * pointing to the start of the icmp header, thus making the ttl and other
- * data being random numbers. This I understand is just made as undefined
- * behavior, and I preferred to set ttl to 0 instead. */
-void ping_print_echo(struct sockaddr_in *from, struct ip *ip, struct icmphdr * icmp, int len) {
-    bool timing = false;
-    double triptime = 0.0;
-    uint8_t ttl = 0;
-
-    if (ip != NULL) {
-        ttl = ip->ip_ttl;
-        len  = len - (ip->ip_hl << 2);
-    }
-
-    printf ("%d bytes from %s: icmp_seq=%u", len,
-            inet_ntoa (*(struct in_addr *) &from->sin_addr.s_addr),
-            ntohs (icmp->un.echo.sequence));
-    printf (" ttl=%d", ttl);
-    if (timing)
-        printf (" time=%.3f ms", triptime);
-}
-
-static ssize_t ping_recv(ping *p) {
+static ssize_t ping_recv(ping *p)
+{
     ssize_t bytes = 0;
     uint8_t recv_buff[IP_HDRLEN_MAX + sizeof(ping_pkt)];
     socklen_t fromlen = sizeof(struct sockaddr_in);
@@ -225,7 +293,7 @@ static ssize_t ping_recv(ping *p) {
     struct ip *ip = NULL;
 
     bytes = recvfrom(p->fd, recv_buff, ARRAY_SIZE(recv_buff), 0,
-                     (struct sockaddr *)&p->from, &fromlen);
+                     (struct sockaddr*)&p->from, &fromlen);
     if (bytes <= 0) {
         /* In case bytes == 0 peer closed connection, which should not happen */
         return -1;
@@ -237,7 +305,6 @@ static ssize_t ping_recv(ping *p) {
 
     /* Validate identity (only raw mode) */
     if (!p->is_dgram && (ntohs(pkt->hdr.un.echo.id) != p->id)) {
-        printf("Error id recv [%X], local [%X]\n", ntohs(pkt->hdr.un.echo.id), p->id);
         goto exit_badmsg;
     }
 
@@ -245,7 +312,6 @@ static ssize_t ping_recv(ping *p) {
     seq = ntohs(pkt->hdr.un.echo.sequence);
     /* TODO: Handle duplicates? */
     if (seq >= p->num_sent) {
-        printf("Error sequence [%d]\n", seq);
         goto exit_badmsg;
     }
 
@@ -254,7 +320,7 @@ static ssize_t ping_recv(ping *p) {
     if (p->is_dgram == false) {
         ip = (struct ip*)recv_buff;
     }
-    ping_print_echo(&p->from, ip, &pkt->hdr, bytes);
+    ping_print_echo(&p->from, ip, &p->stat, pkt, bytes);
 
     return bytes;
 
@@ -263,7 +329,8 @@ exit_badmsg:
     return -1;
 }
 
-static int ping_run(ping * p, char *host) {
+static int ping_run(ping * p, char* host)
+{
     int ret = 0;
     ssize_t bytes;
     int wait;
@@ -271,6 +338,11 @@ static int ping_run(ping * p, char *host) {
     bool finishing;
     struct pollfd pfd;
 
+    /* Reset statistics */
+    memset (&p->stat, 0, sizeof (ping_stat));
+    p->stat.tmin = 999999999.0;
+
+    /* Get the new host */
     p->dest = ping_get_host(host);
     if (p->dest == NULL) {
         return -1;
@@ -317,16 +389,19 @@ static int ping_run(ping * p, char *host) {
                 done = true;
             }
 
-        } else {
+        }
+        else {
             if (p->count == 0 || p->num_sent < p->count) {
                 if (ping_send(p) < 0) {
                     ret = -1;
                     done = true;
                     continue;
                 }
-            } else if (finishing) {
+            }
+            else if (finishing) {
                 done = true;
-            } else {
+            }
+            else {
                 finishing = true;
                 wait = PING_MAX_WAIT;
             }
@@ -334,12 +409,16 @@ static int ping_run(ping * p, char *host) {
     }
 
 exit_clean:
+    ping_print_stat(p);
+
     free(p->dest->name);
     free(p->dest);
+
     return ret;
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
     int c;
     bool verbose = false;
     size_t interval = PING_DEFAULT_INTERVAL;
