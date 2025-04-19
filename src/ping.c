@@ -36,6 +36,7 @@
 #define PING_MIN_INTERVAL 0.2
 #define PING_MAX_WAIT (10 * PING_MS_PER_SEC)
 #define PING_SEQMAP_SIZE 128
+#define PING_MAX_PATTERN 16
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -49,6 +50,7 @@
 
 /* Ping options */
 #define OPT_VERBOSE 0x01
+#define OPT_PATTERN 0x02
 
 typedef struct ping_pkt_s {
     struct icmphdr hdr;
@@ -64,19 +66,21 @@ typedef struct ping_stat_s {
 
 
 typedef struct ping_s {
-    int                  fd;
-    bool                 is_dgram;
-    int                  id;
-    host                *dest;
-    ping_pkt             pkt;
-    ping_stat			 stat;
-    uint8_t				 seq_map[PING_SEQMAP_SIZE];
-    size_t               interval;
-    size_t               count;
-    size_t               num_sent;
-    size_t               num_recv;
-    size_t               num_dup;
-    int                  options;
+    int          fd;
+    bool         is_dgram;
+    int          id;
+    host        *dest;
+    ping_pkt     pkt;
+    ping_stat	 stat;
+    uint8_t		 seq_map[PING_SEQMAP_SIZE];
+    uint8_t		 pattern[PING_MAX_PATTERN];
+    int          pattern_len;
+    size_t       interval;
+    size_t       count;
+    size_t       num_sent;
+    size_t       num_recv;
+    size_t       num_dup;
+    int          options;
 } ping;
 
 static ping *ping_init(int ident)
@@ -200,10 +204,10 @@ static void ping_print_stat(ping *p)
     printf ("%zu packets transmitted, ", p->num_sent);
     printf ("%zu packets received, ", p->num_recv);
 
-    /* TODO: handle duplicates */
-    /* if (ping->ping_num_rept) */
-    /*     printf ("+%zu duplicates, ", ping->ping_num_rept); */
-    if (p->num_sent) {
+    if (p->num_dup != 0) {
+        printf ("+%zu duplicates, ", p->num_dup);
+    }
+    if (p->num_sent != 0) {
         if (p->num_recv > p->num_sent) {
             printf ("-- somebody is printing forged packets!");
         }
@@ -236,7 +240,8 @@ static void ping_create_package(ping *p)
     pkt->hdr.type = ICMP_ECHO;
     pkt->hdr.un.echo.id = htons(p->id);
     pkt->hdr.un.echo.sequence = htons(p->num_sent);
-    ping_generate_data(NULL, pkt->data, ARRAY_SIZE(pkt->data));
+    ping_generate_data((p->options & OPT_PATTERN) ? p->pattern : NULL, p->pattern_len,
+                       pkt->data, ARRAY_SIZE(pkt->data));
     /* Last since all data must be set unless checksum which must be all 0 */
     pkt->hdr.checksum = ping_calc_icmp_checksum((uint16_t*)pkt, sizeof(ping_pkt));
 }
@@ -447,11 +452,13 @@ int main(int argc, char** argv)
     int c;
     bool verbose = false;
     double interval = PING_DEFAULT_INTERVAL;
+    uint8_t pattern[PING_MAX_PATTERN] = {0};
+    int pattern_len = 0;
     size_t count = 0;
     ping *p;
     char *endptr;
 
-    while ((c = getopt(argc, argv, "vi:c:?")) != -1) {
+    while ((c = getopt(argc, argv, "vi:c:p:?")) != -1) {
         switch (c) {
         case 'v':
             verbose = true;
@@ -482,6 +489,14 @@ int main(int argc, char** argv)
             }
             break;
 
+        case 'p':
+            pattern_len = ping_decode_pattern(optarg, pattern, ARRAY_SIZE(pattern));
+            if (pattern_len < 0) {
+                fprintf(stderr, "invalid value near `%s'\n", optarg);
+                exit (EXIT_FAILURE);
+            }
+            break;
+
         case '?':
             printf(HELP_STRING);
             exit(EXIT_SUCCESS);
@@ -498,6 +513,11 @@ int main(int argc, char** argv)
     /* Write the options into the ping structure */
     if (verbose) {
         p->options |= OPT_VERBOSE;
+    }
+    if (pattern_len > 0) {
+        p->options |= OPT_PATTERN;
+        memcpy(p->pattern, pattern, pattern_len);
+        p->pattern_len = pattern_len;
     }
     p->interval = interval;
     p->count = count;

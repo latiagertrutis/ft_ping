@@ -48,8 +48,27 @@ host *ping_get_host(char *hostname)
     return h;
 }
 
-/* TODO: Manage pattern lenght */
-unsigned char *ping_generate_data(unsigned char * pat, unsigned char *data, size_t len)
+int ping_decode_pattern(char  *optarg, uint8_t *pattern, int len)
+{
+    int i = 0;
+    int off;
+    int c;
+
+    for (i = 0; *optarg != '\0' && i < len; i++) {
+        if (sscanf(optarg, "%2x%n", &c, &off) != 1) {
+            fprintf(stderr, "error in pattern near %s", optarg);
+            return -1;
+        }
+
+        optarg += off;
+        pattern[i] = c;
+    }
+
+    return i;
+}
+
+unsigned char *ping_generate_data(unsigned char * pat, int pat_len, unsigned char *data,
+                                  size_t len)
 {
     size_t i = 0;
     struct timespec now;
@@ -71,7 +90,7 @@ unsigned char *ping_generate_data(unsigned char * pat, unsigned char *data, size
     if (pat != NULL) {
         for (; data_p < data + len; data_p++) {
             *data_p = pat[i];
-            if (++i >= len) {
+            if (++i >= pat_len) {
                 i = 0;
             }
         }

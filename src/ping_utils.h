@@ -9,7 +9,9 @@ typedef struct host_s {
 } host;
 
 host   *ping_get_host(char *hostname);
-unsigned char *ping_generate_data(unsigned char * pat, unsigned char *data, size_t len);
+int ping_decode_pattern(char  *optarg, uint8_t *pattern, int len);
+unsigned char *ping_generate_data(unsigned char * pat, int pat_len, unsigned char *data,
+                                  size_t len);
 uint16_t ping_calc_icmp_checksum(uint16_t *pkt, size_t len);
 double timespec_to_ms(struct timespec ts);
 struct timespec ms_to_timespec(int ms);
