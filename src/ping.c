@@ -16,6 +16,7 @@
 #include <string.h>
 #include <poll.h>
 #include <math.h>
+#include <signal.h>
 
 #include "ping_utils.h"
 
@@ -67,7 +68,6 @@ typedef struct ping_s {
     bool                 is_dgram;
     int                  id;
     host                *dest;
-    struct sockaddr_in   from;
     ping_pkt             pkt;
     ping_stat			 stat;
     uint8_t				 seq_map[PING_SEQMAP_SIZE];
@@ -294,13 +294,14 @@ static ssize_t ping_recv(ping *p)
     ssize_t bytes = 0;
     uint8_t recv_buff[IP_HDRLEN_MAX + sizeof(ping_pkt)];
     socklen_t fromlen = sizeof(struct sockaddr_in);
+    struct sockaddr_in from;
     ping_pkt *pkt;
     uint16_t seq;
     bool dupflag = false;
     struct ip *ip = NULL;
 
     bytes = recvfrom(p->fd, recv_buff, ARRAY_SIZE(recv_buff), 0,
-                     (struct sockaddr*)&p->from, &fromlen);
+                     (struct sockaddr*)&from, &fromlen);
     if (bytes <= 0) {
         /* In case bytes == 0 peer closed connection, which should not happen */
         return -1;
@@ -334,7 +335,7 @@ static ssize_t ping_recv(ping *p)
     if (p->is_dgram == false) {
         ip = (struct ip*)recv_buff;
     }
-    ping_print_echo(dupflag, &p->from, ip, &p->stat, pkt, bytes);
+    ping_print_echo(dupflag, &from, ip, &p->stat, pkt, bytes);
 
     return bytes;
 
@@ -343,18 +344,27 @@ exit_badmsg:
     return -1;
 }
 
+volatile bool done = false;
+
+static void ping_sigint_handler(int signal)
+{
+    done = true;
+}
+
 static int ping_run(ping * p, char* host)
 {
     int ret = 0;
     ssize_t bytes;
     int wait;
-    bool done;
     bool finishing;
     struct pollfd pfd;
 
     /* Reset statistics */
     memset (&p->stat, 0, sizeof (ping_stat));
     p->stat.tmin = 999999999.0;
+    p->num_sent = 0;
+    p->num_recv = 0;
+    p->num_dup = 0;
 
     /* Reset the sequence number map */
     memset(p->seq_map, 0, PING_SEQMAP_SIZE);
@@ -381,7 +391,8 @@ static int ping_run(ping * p, char* host)
         goto exit_clean;
     }
 
-    done = false;
+    signal(SIGINT, ping_sigint_handler);
+
     finishing = false;
     wait = p->interval;
     while (!done) {
@@ -391,19 +402,17 @@ static int ping_run(ping * p, char* host)
         pret = poll(&pfd, 1, wait);
         if (pret < 0) {
             ret = -1;
-            done = true;
-            continue;
+            break;
         }
 
         if (pret > 0) {
             if (ping_recv(p) < 0) {
                 ret = -1;
-                done = true;
-                continue;
+                break;
             }
 
-            if (p->num_recv >= p->count) {
-                done = true;
+            if (p->count && p->num_recv >= p->count) {
+                break;
             }
 
         }
@@ -411,12 +420,11 @@ static int ping_run(ping * p, char* host)
             if (p->count == 0 || p->num_sent < p->count) {
                 if (ping_send(p) < 0) {
                     ret = -1;
-                    done = true;
-                    continue;
+                    break;
                 }
             }
             else if (finishing) {
-                done = true;
+                break;
             }
             else {
                 finishing = true;
@@ -463,7 +471,15 @@ int main(int argc, char** argv)
             break;
 
         case 'c':
-            count = atol(optarg);
+            count = strtoul(optarg, &endptr, 0);
+            if (*endptr != '\0') {
+                fprintf(stderr, "invalid value (`%s' near `%s')\n", optarg, endptr);
+                exit (EXIT_FAILURE);
+            }
+            if (count == 0) {
+                fprintf (stderr, "option value too small: %s\n", optarg);
+                exit (EXIT_FAILURE);
+            }
             break;
 
         case '?':
@@ -489,7 +505,9 @@ int main(int argc, char** argv)
     /* Loop through all the hosts */
     for (; optind < argc; optind++) {
         if (ping_run(p, argv[optind]) != 0) {
-            perror("ping_echo");
+            if (errno != EINTR) {
+                perror("ping_echo");
+            }
         }
     }
 
