@@ -30,8 +30,9 @@
     "  -?                 give this help list\n"
 
 #define PING_DATALEN    (64 - sizeof(struct icmphdr))
-#define PING_DEFAULT_INTERVAL 1000      /* Milliseconds */
+#define PING_DEFAULT_INTERVAL 1000.0      /* Milliseconds */
 #define PING_MS_PER_SEC 1000     /* Millisecond precision */
+#define PING_MIN_INTERVAL 0.2
 #define PING_MAX_WAIT (10 * PING_MS_PER_SEC)
 #define PING_SEQMAP_SIZE 128
 
@@ -214,7 +215,7 @@ static void ping_print_stat(ping *p)
     printf ("\n");
 
     if (p->num_recv && ARRAY_SIZE(p->pkt.data) >= sizeof(struct timespec)) {
-        double total = p->num_recv; // TODO: manage duplicates: + ping->ping_num_rept;
+        double total = p->num_recv + p->num_dup;
         double avg = p->stat.tsum / total;
         double vari = p->stat.tsumsq / total - avg * avg;
 
@@ -437,9 +438,10 @@ int main(int argc, char** argv)
 {
     int c;
     bool verbose = false;
-    size_t interval = PING_DEFAULT_INTERVAL;
+    double interval = PING_DEFAULT_INTERVAL;
     size_t count = 0;
     ping *p;
+    char *endptr;
 
     while ((c = getopt(argc, argv, "vi:c:?")) != -1) {
         switch (c) {
@@ -448,8 +450,16 @@ int main(int argc, char** argv)
             break;
 
         case 'i':
-            /* TODO: Use float */
-            interval = atol(optarg) * PING_MS_PER_SEC;
+            interval = strtod(optarg, &endptr);
+            if (*endptr != '\0') {
+                fprintf(stderr, "invalid value (`%s' near `%s')\n", optarg, endptr);
+                exit (EXIT_FAILURE);
+            }
+            if (interval < PING_MIN_INTERVAL) {
+                fprintf (stderr, "option value too small: %s\n", optarg);
+                exit (EXIT_FAILURE);
+            }
+            interval *= PING_MS_PER_SEC;
             break;
 
         case 'c':
