@@ -33,6 +33,7 @@
 #define PING_DEFAULT_INTERVAL 1000      /* Milliseconds */
 #define PING_MS_PER_SEC 1000     /* Millisecond precision */
 #define PING_MAX_WAIT (10 * PING_MS_PER_SEC)
+#define PING_SEQMAP_SIZE 128
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -67,8 +68,8 @@ typedef struct ping_s {
     host                *dest;
     struct sockaddr_in   from;
     ping_pkt             pkt;
-    ping_stat stat;
-    uint8_t             *seq_map;
+    ping_stat			 stat;
+    uint8_t				 seq_map[PING_SEQMAP_SIZE];
     size_t               interval;
     size_t               count;
     size_t               num_sent;
@@ -85,7 +86,7 @@ static ping *ping_init(int ident)
     int              one = 1;
     bool is_dgram = false;
 
-    proto     = getprotobyname("icmp");
+    proto = getprotobyname("icmp");
     if (proto == NULL) {
         /* errno is not set by getprotobyname() */
         errno = ENOPROTOOPT;
@@ -141,8 +142,8 @@ close_return:
  * data being random numbers. This I understand is just made as undefined
  * behavior, and I preferred to set ttl to 0 instead.
  */
-static void ping_print_echo(struct sockaddr_in *from, struct ip *ip, ping_stat *stat,
-                            ping_pkt *pkt, int len)
+static void ping_print_echo(bool dupflag, struct sockaddr_in *from, struct ip *ip,
+                            ping_stat *stat, ping_pkt *pkt, int len)
 {
     bool timing = false;
     double triptime = 0.0;
@@ -179,11 +180,14 @@ static void ping_print_echo(struct sockaddr_in *from, struct ip *ip, ping_stat *
             inet_ntoa (*(struct in_addr*) &from->sin_addr.s_addr),
             ntohs (pkt->hdr.un.echo.sequence));
     printf (" ttl=%d", ttl);
+
     if (timing) {
         printf (" time=%.3f ms", triptime);
     }
 
-    /* TODO: print duplicates */
+    if (dupflag) {
+        printf (" (DUP!)");
+    }
 
     printf ("\n");
 }
@@ -230,7 +234,7 @@ static void ping_create_package(ping *p)
 
     pkt->hdr.type = ICMP_ECHO;
     pkt->hdr.un.echo.id = htons(p->id);
-    pkt->hdr.un.echo.sequence = htons(p->num_sent); //todo: add sequence number
+    pkt->hdr.un.echo.sequence = htons(p->num_sent);
     ping_generate_data(NULL, pkt->data, ARRAY_SIZE(pkt->data));
     /* Last since all data must be set unless checksum which must be all 0 */
     pkt->hdr.checksum = ping_calc_icmp_checksum((uint16_t*)pkt, sizeof(ping_pkt));
@@ -269,6 +273,7 @@ static ssize_t ping_send(ping *p)
     ping_pkt *pkt = &p->pkt;
     ssize_t bytes = 0;
 
+    seq_clr(p->num_sent, p->seq_map, ARRAY_SIZE(p->seq_map));
     ping_create_package(p);
 
     bytes = sendto(p->fd, pkt, sizeof(ping_pkt), 0,
@@ -290,6 +295,7 @@ static ssize_t ping_recv(ping *p)
     socklen_t fromlen = sizeof(struct sockaddr_in);
     ping_pkt *pkt;
     uint16_t seq;
+    bool dupflag = false;
     struct ip *ip = NULL;
 
     bytes = recvfrom(p->fd, recv_buff, ARRAY_SIZE(recv_buff), 0,
@@ -303,24 +309,31 @@ static ssize_t ping_recv(ping *p)
         goto exit_badmsg;
     }
 
+    /* Validate the type of message */
+    if (pkt->hdr.type != ICMP_ECHOREPLY) {
+        goto exit_badmsg;
+    }
+
     /* Validate identity (only raw mode) */
     if (!p->is_dgram && (ntohs(pkt->hdr.un.echo.id) != p->id)) {
         goto exit_badmsg;
     }
 
-    /* Validate sequence number, should be one less than the messages transmitted */
+    /* Validate sequence number */
     seq = ntohs(pkt->hdr.un.echo.sequence);
-    /* TODO: Handle duplicates? */
-    if (seq >= p->num_sent) {
-        goto exit_badmsg;
+    if (seq_check(seq, p->seq_map, ARRAY_SIZE(p->seq_map))) {
+        p->num_dup++;
+        dupflag = true;
     }
-
-    p->num_recv++;
+    else {
+        seq_set(seq, p->seq_map, ARRAY_SIZE(p->seq_map));
+        p->num_recv++;
+    }
 
     if (p->is_dgram == false) {
         ip = (struct ip*)recv_buff;
     }
-    ping_print_echo(&p->from, ip, &p->stat, pkt, bytes);
+    ping_print_echo(dupflag, &p->from, ip, &p->stat, pkt, bytes);
 
     return bytes;
 
@@ -341,6 +354,9 @@ static int ping_run(ping * p, char* host)
     /* Reset statistics */
     memset (&p->stat, 0, sizeof (ping_stat));
     p->stat.tmin = 999999999.0;
+
+    /* Reset the sequence number map */
+    memset(p->seq_map, 0, PING_SEQMAP_SIZE);
 
     /* Get the new host */
     p->dest = ping_get_host(host);

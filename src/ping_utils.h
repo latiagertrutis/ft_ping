@@ -18,4 +18,7 @@ struct timespec timespec_add(struct timespec last, struct timespec now);
 struct timespec timespec_normalise(struct timespec ts);
 double nabs (double a);
 double nsqrt (double a, double prec);
+bool seq_check(uint16_t seq, uint8_t *seq_map, size_t len);
+void seq_set(uint16_t seq, uint8_t *seq_map, size_t len);
+void seq_clr(uint16_t seq, uint8_t *seq_map, size_t len);
 #endif

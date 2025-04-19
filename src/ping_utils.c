@@ -1,5 +1,3 @@
-#include <bits/time.h>
-#include <bits/types/struct_timespec.h>
 #include <netdb.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -7,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <stdbool.h>
+#include <errno.h>
 
 #include "ping_utils.h"
 
@@ -27,6 +27,7 @@ host *ping_get_host(char *hostname)
 
     ret = getaddrinfo(hostname, NULL, &hints, &res);
     if (ret != 0) {
+        errno = EHOSTUNREACH;
         return NULL;
     }
 
@@ -177,4 +178,52 @@ double nsqrt (double a, double prec)
     } while (nabs (x1 - x0) > prec);
 
     return x1;
+}
+
+bool seq_check(uint16_t seq, uint8_t *seq_map, size_t len)
+{
+    size_t i;
+    uint8_t mask;
+
+    if (seq_map == NULL || len == 0) {
+        return false;
+    }
+
+    seq = seq % (8 * len); // Handle wraps
+    i = seq >> 3; // Get seq_map index (/8)
+    mask = 0x1 << (seq & 0x7); // Get position inside the index (%8)
+
+    return (seq_map[i] & mask);
+}
+
+void seq_set(uint16_t seq, uint8_t *seq_map, size_t len)
+{
+    size_t i;
+    uint8_t mask;
+
+    if (seq_map == NULL || len == 0) {
+        return;
+    }
+
+    seq = seq % (8 * len); // Handle wraps
+    i = seq >> 3; // Get seq_map index (/8)
+    mask = 0x1 << (seq & 0x7); // Get position inside the index (%8)
+
+    seq_map[i] |= mask;
+}
+
+void seq_clr(uint16_t seq, uint8_t *seq_map, size_t len)
+{
+    size_t i;
+    uint8_t mask;
+
+    if (seq_map == NULL || len == 0) {
+        return;
+    }
+
+    seq = seq % (8 * len); // Handle wraps
+    i = seq >> 3; // Get seq_map index (/8)
+    mask = 0x1 << (seq & 0x7); // Get position inside the index (%8)
+
+    seq_map[i] &= ~mask;
 }
