@@ -411,10 +411,8 @@ static int ping_run(ping * p, char* host)
         }
 
         if (pret > 0) {
-            if (ping_recv(p) < 0) {
-                ret = -1;
-                break;
-            }
+            /* Receiving wrong should not cause the loop to end */
+            ping_recv(p);
 
             if (p->count && p->num_recv >= p->count) {
                 break;
