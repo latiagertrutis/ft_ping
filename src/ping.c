@@ -501,6 +501,12 @@ int main(int argc, char** argv)
         }
     }
 
+    if (optind >= argc) {
+        fprintf(stderr, "missing host operand\n");
+        fprintf(stderr, "Try '%s -?' for more information.\n", argv[0]);
+        exit (EXIT_FAILURE);
+    }
+
     /* Initialize ping structure */
     p = ping_init(getpid());
     if (p == NULL) {
