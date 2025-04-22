@@ -1,4 +1,4 @@
-.PHONY: all clean distclean
+.PHONY: all clean distclean test
 
 TARGET = ft_ping
 
@@ -25,6 +25,10 @@ endif
 	rm -f $@.$$$$
 
 include $(DEP)
+
+test:
+	@mkdir -p test/output
+	@$(MAKE) -f test.mk -C test
 
 clean:
 	@rm -f $(OBJ) $(DEP)

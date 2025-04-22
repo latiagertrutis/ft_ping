@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot generator="Robot 7.2.2 (Python 3.11.2 on linux)" generated="2025-04-22T21:30:11.330761" rpa="false" schemaversion="5">
+<suite id="s1" name="Test" source="/test">
+<suite id="s1-s1" name="Ping" source="/test/ping.robot">
+<test id="s1-s1-t1" name="Test Receiving" line="14">
+<kw name="Start Test Server" owner="TestPingServer" type="SETUP">
+<status status="PASS" start="2025-04-22T21:30:11.354389" elapsed="0.000374"/>
+</kw>
+<kw name="Run Process" owner="Process">
+<msg time="2025-04-22T21:30:11.355124" level="INFO">Starting process:
+/ft_ping 127.0.0.1</msg>
+<msg time="2025-04-22T21:30:11.357663" level="INFO">Waiting for process to complete.</msg>
+<msg time="2025-04-22T21:30:21.388532" level="INFO">Process did not complete in 10 seconds.</msg>
+<msg time="2025-04-22T21:30:21.388940" level="INFO">Gracefully terminating process.</msg>
+<msg time="2025-04-22T21:30:21.490323" level="INFO">Process completed.</msg>
+<msg time="2025-04-22T21:30:21.490955" level="INFO">[Thread] Packet from '127.0.0.1': 0 b'E\x00\x00TE!@\x00@\x01\xf7\x85\x7f\x00\x00\x01\x7f\x00\x00\x01\x08\x00\xb2}\x00\x08\x00\x00`y\x00\x00\x00\x00\x00\x00\x1aFM)\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f !"#$%&amp;\''</msg>
+<arg>${PING_BIN}</arg>
+<arg>127.0.0.1</arg>
+<arg>timeout=10secs</arg>
+<doc>Runs a process and waits for it to complete.</doc>
+<status status="PASS" start="2025-04-22T21:30:11.354906" elapsed="10.136595"/>
+</kw>
+<kw name="Wait For Message" owner="TestPingServer">
+<msg time="2025-04-22T21:30:21.494315" level="INFO">[Main] Packet from '127.0.0.1': 0 b'E\x00\x00TE!@\x00@\x01\xf7\x85\x7f\x00\x00\x01\x7f\x00\x00\x01\x08\x00\xb2}\x00\x08\x00\x00`y\x00\x00\x00\x00\x00\x00\x1aFM)\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f !"#$%&amp;\''</msg>
+<status status="PASS" start="2025-04-22T21:30:21.493245" elapsed="0.001153"/>
+</kw>
+<kw name="Stop Test Server" owner="TestPingServer" type="TEARDOWN">
+<status status="PASS" start="2025-04-22T21:30:21.494796" elapsed="0.000230"/>
+</kw>
+<doc>Setup and teardown from setting section</doc>
+<status status="PASS" start="2025-04-22T21:30:11.353274" elapsed="10.141826"/>
+</test>
+<status status="PASS" start="2025-04-22T21:30:11.346085" elapsed="10.149969"/>
+</suite>
+<status status="PASS" start="2025-04-22T21:30:11.331465" elapsed="10.165753"/>
+</suite>
+<statistics>
+<total>
+<stat pass="1" fail="0" skip="0">All Tests</stat>
+</total>
+<tag>
+</tag>
+<suite>
+<stat name="Test" id="s1" pass="1" fail="0" skip="0">Test</stat>
+<stat name="Ping" id="s1-s1" pass="1" fail="0" skip="0">Test.Ping</stat>
+</suite>
+</statistics>
+<errors>
+</errors>
+</robot>

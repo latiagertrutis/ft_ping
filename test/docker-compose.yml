@@ -1,0 +1,14 @@
+services:
+  ping_test:
+    hostname: ping_test
+    image: ping_test
+    container_name: ping_test
+    build:
+      context: ..
+      dockerfile: test/Dockerfile
+    volumes:
+      - ./output/:/output/
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.icmp_echo_ignore_all=1
