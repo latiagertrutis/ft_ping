@@ -2071,25 +2071,25 @@ storage = function () {
 window.output = {};
 </script>
 <script type="text/javascript">
-window.output["suite"] = [1,2,3,0,[],[1,0,10166],[[4,5,6,0,[],[1,15,10150],[],[[7,0,8,[],[1,22,10142],[[1,9,10,0,0,0,0,0,[1,23,0],[]],[0,11,12,0,13,14,0,0,[1,24,10137],[[24,2,15],[27,2,16],[10058,2,17],[10058,2,18],[10159,2,19],[10160,2,20]]],[0,21,10,0,0,0,0,0,[1,10162,1],[[10163,2,22]]],[2,23,10,0,0,0,0,0,[1,10164,0],[]]]]],[],[1,1,0,0]]],[],[],[1,1,0,0]];
+window.output["suite"] = [1,2,3,0,[],[1,0,38],[[4,5,6,0,[],[1,16,21],[],[[7,8,9,[],[1,24,12],[[1,10,11,0,0,0,0,0,[1,25,1],[]],[0,12,13,0,14,15,16,0,[1,26,5],[[27,2,17],[32,2,18]]],[0,19,11,0,0,0,0,0,[1,32,1],[[32,2,20]]],[0,21,11,0,0,0,0,0,[1,33,0],[]],[0,22,13,0,23,16,24,0,[1,33,1],[[33,2,25],[34,2,26],[34,2,27]]],[0,28,29,0,30,31,0,0,[1,34,1],[[34,2,32]]],[0,28,29,0,30,33,0,0,[1,35,1],[[35,2,34]]],[2,35,11,0,0,0,0,0,[1,36,0],[]]]]],[],[1,1,0,0]]],[],[],[1,1,0,0]];
 </script>
 <script type="text/javascript">
 window.output["strings"] = [];
 </script>
 <script type="text/javascript">
-window.output["strings"] = window.output["strings"].concat(["*","*Test","*/test","*../test","*Ping","*/test/ping.robot","*../test/ping.robot","*Test Receiving","*<p>Setup and teardown from setting section\x3c/p>","*Start Test Server","*TestPingServer","*Run Process","*Process","*<p>Runs a process and waits for it to complete.\x3c/p>","*${PING_BIN}    127.0.0.1    timeout=10secs","*Starting process:\n/ft_ping 127.0.0.1","*Waiting for process to complete.","*Process did not complete in 10 seconds.","*Gracefully terminating process.","*Process completed.","eNp1jssKwjAQRX8l9RXcSG59tOrGTd0JLrozgukjCFKV0kVc+O/eWAsiSDgzecyZzCE916UpjmJv8kvZCFvfKiERRhPFBbkSSmQy0U4pT5oEG599gHY20i6eaxfZrqC9/z2ruN1n4fNzGXcFp8dX6Q8w2934z7PvGpIpmRFOoRYkejdv9JU5I7muGUvCmeCb0gRN0ARN0ARN0ATHwtJ/TGgjJwWhDyuCXn8wHJnqvtZSvgAh4mDL","*Wait For Message","eNp1jssKwjAQRX8l9RXcSG59pOrGTd0VXLgzgmltQaRVShdx4b97Yy2IIOHM5DFnMofEXqqj2NnsmjeiqG+lkAj1RHFBroQSqYyNU8qzj4ONzz7AuEIbF82N00VX0N7/nlXU7tPw+bmMuoLT46v0B9htMv7z7LuGZEpmhFOoBdHv5o2pmFOSmZoxJ5wJvilN0ARN0ARN0ARNcCws/ceENjJyJvRRiKDXHwxHtryvjZQvH4xf+A==","*Stop Test Server"]);
+window.output["strings"] = window.output["strings"].concat(["*","*Test","*/test","*../test","*Ping","*/test/ping.robot","*../test/ping.robot","*Test Receiving","*10 seconds","*<p>Setup and teardown from setting section\x3c/p>","*Start Test Server","*TestPingServer","*Start Process","*Process","*<p>Starts a new process on background.\x3c/p>","*${PING_BIN}    -c1    127.0.0.1","*${process}","*Starting process:\n/ft_ping -c1 127.0.0.1","*${process} = &lt;Popen: returncode: None args: ['/ft_ping', '-c1', '127.0.0.1']&gt;","*Wait For Message","eNp1j0sLwjAQhP9KfOYmmfpI1IsX7x56Mx7StEWRqpQi+flObEVRJMwmu8zHTvbpsS5cfhA7589FI8r6WgmJRE8UD+RKKJHJrQ1KRaU2+IUNRm1iFwvuY1fd1jbo8mWK099emfbtsOyG5m0w2oas+AC+5PWJJsdm9scUNyTUtPPMKSZV+rmosRfeGeVtzRpXMR9IgiRIgiRIgiRIgiQYMcYFN4M0PJVT5FGKXn8wHLXfl/IB9pFmig==","*Reply Message","*Wait For Process","*<p>Waits for the process to complete or to reach the given timeout.\x3c/p>","*${result}","*Waiting for process to complete.","*Process completed.","*${result} = &lt;result object with rc 0&gt;","*Log","*BuiltIn","*<p>Logs the given message with the given level.\x3c/p>","*Stdout is: ${result.stdout}","*Stdout is: PING 127.0.0.1 (127.0.0.1): 56 data bytes\n64 bytes from 127.0.0.1: icmp_seq=0 ttl=64 time=1.476 ms\n--- 127.0.0.1 ping statistics ---\n1 packets transmitted, 1 packets received, 0% packet loss\nround-trip min/avg/max/stddev = 1.476/1.476/1.476/0.000 ms","*Stderr is: ${result.stderr}","*Stderr is: ","*Stop Test Server"]);
 </script>
 <script type="text/javascript">
-window.output["stats"] = [[{"elapsed":"00:00:10","fail":0,"label":"All Tests","pass":1,"skip":0}],[],[{"elapsed":"00:00:10","fail":0,"id":"s1","label":"Test","name":"Test","pass":1,"skip":0},{"elapsed":"00:00:10","fail":0,"id":"s1-s1","label":"Test.Ping","name":"Ping","pass":1,"skip":0}]];
+window.output["stats"] = [[{"elapsed":"00:00:00","fail":0,"label":"All Tests","pass":1,"skip":0}],[],[{"elapsed":"00:00:00","fail":0,"id":"s1","label":"Test","name":"Test","pass":1,"skip":0},{"elapsed":"00:00:00","fail":0,"id":"s1-s1","label":"Test.Ping","name":"Ping","pass":1,"skip":0}]];
 </script>
 <script type="text/javascript">
 window.output["errors"] = [];
 </script>
 <script type="text/javascript">
-window.output["baseMillis"] = 1745357411331;
+window.output["baseMillis"] = 1745410521385;
 </script>
 <script type="text/javascript">
-window.output["generated"] = 10174;
+window.output["generated"] = 42;
 </script>
 <script type="text/javascript">
 window.output["expand_keywords"] = null;

@@ -13,5 +13,10 @@ Test Teardown      Stop Test Server
 *** Test Cases ***
 Test Receiving
     [Documentation]    Setup and teardown from setting section
-    Run Process        ${PING_BIN}    127.0.0.1    timeout=10secs
+    [Timeout]           10s
+    ${process}=    Start Process       ${PING_BIN}    -c1    127.0.0.1
     Wait For Message
+    Reply Message
+    ${result}=     Wait For Process    ${process}
+    Log            Stdout is: ${result.stdout}
+    Log            Stderr is: ${result.stderr}
