@@ -29,49 +29,47 @@ def _decode_icmp_data(data: bytes) -> tuple[int, int, int, int, int, bytes]:
     icmp_hdr = data[IP_HEADER_SIZE:IP_HEADER_SIZE+ICMP_HEADER_SIZE]
     return struct.unpack("!BBHHH", icmp_hdr) + (data[IP_HEADER_SIZE+ICMP_HEADER_SIZE:],)
 
+def _generate_message(icmp_type: int, icmp_id: int, icmp_seq: int, data: bytes) -> bytes:
+
+    resp_type = icmp_type
+    resp_id = icmp_id
+    resp_seq = icmp_seq
+    resp_data = data
+
+    # Calc checksum with 0 value
+    packet = struct.pack("!BBHHH", resp_type, 0, 0, resp_id, resp_seq) + resp_data
+    checksum = _calc_checksum(packet)
+
+    # Construct the final package
+    return struct.pack("!BBHHH", resp_type, 0, checksum, resp_id, resp_seq) + resp_data
+
+
+
 class TestPingServer:
     def __init__(self) -> None:
-        self.finish: bool = False
-        self.data: bytes
-        self.addr: _RetAddress
         self.socket: fileno
-        self.thread: threading.Thread
-
-    def _receive_message(self) -> None:
-        self.data, self.addr = self.socket.recvfrom(MAX_ICMP_PACKET_SIZE)
-        print ("[Thread] Packet from %r: %r" % self.addr,self.data)
 
     def start_test_server(self) -> None:
         self.socket = socket.socket(socket.AF_INET,socket.SOCK_RAW,socket.IPPROTO_ICMP)
         self.socket.bind(("127.0.0.1", 0))
-        self.thread = threading.Thread(target=self._receive_message)
-        self.thread.start()
 
-    def wait_for_message(self) -> None:
-        self.thread.join()
-        req_type = _decode_icmp_data(self.data)[0]
-        if req_type != ICMP_ECHO_REQUEST:
-            raise ValueError("Received type [%d] when [%d] was expected" %
-                             (req_type, ICMP_ECHO_REQUEST))
+    def wait_for_messages(self, count: int) -> None:
 
-    def reply_message(self) -> None:
-        req_type, _, req_checksum, req_id, req_seq, req_data = _decode_icmp_data(self.data)
+        while count:
+            data, addr = self.socket.recvfrom(MAX_ICMP_PACKET_SIZE)
 
-        resp_type = ICMP_ECHO_REPLY
-        resp_id = req_id
-        resp_seq = req_seq
-        resp_data = req_data
+            req_type, req_code, req_checksum, req_id, req_seq, req_data = _decode_icmp_data(data)
 
-        # Calc checksum with 0 value
-        resp_packet = struct.pack("!BBHHH", resp_type, 0, 0, resp_id, resp_seq) + resp_data
-        resp_checksum = _calc_checksum(resp_packet)
+            if req_type != ICMP_ECHO_REQUEST:
+                continue
 
-        # Construct the final package
-        resp_packet = struct.pack("!BBHHH", resp_type, 0, resp_checksum,
-                                  resp_id, resp_seq) + resp_data
+            # Generate the response packet
+            packet = _generate_message(ICMP_ECHO_REPLY, req_id, req_seq, req_data)
+            
+            # Send back the response
+            self.socket.sendto(packet, addr)
 
-        # Send back the response
-        self.socket.sendto(resp_packet, self.addr)
+            count -= 1
         
     def stop_test_server(self) -> None:
         self.socket.close()
