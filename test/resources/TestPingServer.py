@@ -23,6 +23,7 @@ class TestPingServer:
     def wait_for_messages(self, count: int,
                           payload: bytes = b'',
                           icmp_type: int = ICMP_ECHO_REPLY,
+                          wrong_checksum: bool = False,
                           comparable: bool = False) -> str:
         ret = ""
         while count:
@@ -41,7 +42,7 @@ class TestPingServer:
                 payload = req_payload
 
             # Generate the response packet
-            packet = generate_message(icmp_type, req_id, req_seq, payload)
+            packet = generate_message(icmp_type, wrong_checksum, req_id, req_seq, payload)
             
             # Send back the response
             self.socket.sendto(packet, addr)

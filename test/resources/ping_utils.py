@@ -70,7 +70,7 @@ def decode_icmp_data(data: bytes) -> tuple[int, int, int, int, int, bytes]:
     icmp_hdr = data[IP_HEADER_SIZE:IP_HEADER_SIZE+ICMP_HEADER_SIZE]
     return struct.unpack("!BBHHH", icmp_hdr) + (data[IP_HEADER_SIZE+ICMP_HEADER_SIZE:],)
 
-def generate_message(icmp_type: int, icmp_id: int, icmp_seq: int, data: bytes) -> bytes:
+def generate_message(icmp_type: int, wrong_checksum: bool, icmp_id: int, icmp_seq: int, data: bytes) -> bytes:
 
     resp_type = icmp_type
     resp_id = icmp_id
@@ -80,6 +80,8 @@ def generate_message(icmp_type: int, icmp_id: int, icmp_seq: int, data: bytes) -
     # Calc checksum with 0 value
     packet = struct.pack("!BBHHH", resp_type, 0, 0, resp_id, resp_seq) + resp_data
     checksum = calc_checksum(packet)
+    if wrong_checksum:
+        checksum += 1
 
     # Construct the final package
     return struct.pack("!BBHHH", resp_type, 0, checksum, resp_id, resp_seq) + resp_data

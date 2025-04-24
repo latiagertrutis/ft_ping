@@ -246,7 +246,7 @@ static void ping_create_package(ping *p)
     pkt->hdr.checksum = ping_calc_icmp_checksum((uint16_t*)pkt, sizeof(ping_pkt));
 }
 
-static bool ping_validate_icmp_pkg(ping *p, uint8_t* data, size_t len, ping_pkt** pkt)
+static int ping_validate_icmp_pkg(ping *p, uint8_t* data, size_t len, ping_pkt** pkt)
 {
     size_t hlen = 0;
     uint16_t chksum;
@@ -258,7 +258,7 @@ static bool ping_validate_icmp_pkg(ping *p, uint8_t* data, size_t len, ping_pkt*
 
     /* Received bytes should at least be equal to the icmp header */
     if (len < hlen + sizeof(struct icmphdr)) {
-        return false;
+        return -1;
     }
 
     *pkt = (ping_pkt*)(data + hlen);
@@ -268,10 +268,10 @@ static bool ping_validate_icmp_pkg(ping *p, uint8_t* data, size_t len, ping_pkt*
     (*pkt)->hdr.checksum = 0;
     (*pkt)->hdr.checksum = ping_calc_icmp_checksum((uint16_t*)*pkt, len - hlen);
     if ((*pkt)->hdr.checksum != chksum) {
-        return false;
+        return 1;
     }
 
-    return true;
+    return 0;
 }
 
 static ssize_t ping_send(ping *p)
@@ -297,6 +297,7 @@ static ssize_t ping_send(ping *p)
 static ssize_t ping_recv(ping *p)
 {
     ssize_t bytes = 0;
+    int ret;
     uint8_t recv_buff[IP_HDRLEN_MAX + sizeof(ping_pkt)];
     socklen_t fromlen = sizeof(struct sockaddr_in);
     struct sockaddr_in from;
@@ -312,8 +313,17 @@ static ssize_t ping_recv(ping *p)
         return -1;
     }
 
-    if (!ping_validate_icmp_pkg(p, recv_buff, bytes, &pkt)) {
+    ret = ping_validate_icmp_pkg(p, recv_buff, bytes, &pkt);
+    if (ret < 0) {
+        fprintf (stderr, "packet too short (%ld bytes) from %s\n",
+                 bytes, inet_ntoa (p->dest->addr.sin_addr));
         goto exit_badmsg;
+    }
+
+    /* If checksum is wrong, just print and continue */
+    if (ret != 0) {
+        fprintf (stderr, "checksum mismatch from %s\n",
+                 inet_ntoa (p->dest->addr.sin_addr));
     }
 
     /* Validate the type of message */
@@ -361,6 +371,7 @@ static int ping_run(ping * p, char* host)
 {
     int ret = 0;
     ssize_t bytes;
+    size_t nresp = 0;
     int wait;
     bool finishing;
     struct pollfd pfd;
@@ -412,10 +423,13 @@ static int ping_run(ping * p, char* host)
         }
 
         if (pret > 0) {
-            /* Receiving wrong should not cause the loop to end */
-            ping_recv(p);
+            /* Receiving wrong should not cause the loop to end. And the loop
+             * should end when we receive count messages even if they are wrong */
+            if (ping_recv(p) >= 0) {
+                nresp++;
+            }
 
-            if (p->count && p->num_recv >= p->count) {
+            if (p->count && nresp >= p->count) {
                 break;
             }
 

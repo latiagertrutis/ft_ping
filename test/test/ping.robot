@@ -152,3 +152,42 @@ Test Receiving Wrong Type
     Should Be Equal           ${exit_status}                ${my_exit_status}
     Should Be Equal           ${out}                        ${my_out}
     Should Be Equal           ${messages}                   ${my_messages}
+
+Test Receiving Wrong Checksum
+    [Documentation]       Send and receive 3 time with a wrong checksum
+    [Timeout]             10s
+
+    # Run inetutils ping
+    ${process}=           Start Process                 ${PING_BIN}
+    ...                   -c3                           -v                     ${TEST_ADDRESS}
+    ${messages}=          Wait For Messages
+    ...                   count=3                       wrong_checksum=True    comparable=True
+    ${result}=            Wait For Process              ${process}
+    ${exit_status}=       Set Variable                  ${result.rc}
+    ${out}=               Remove String Using Regexp    ${result.stdout}
+    ...                   id 0x[0-9a-f]* = \\d*
+    ...                   ttl=\\d*
+    ...                   time=\\d+\\.\\d* ms
+    ...                   stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
+    Log                   out is: ${out}
+    Log                   ${result.stderr}
+
+    # Run ft_ping
+    ${process}=           Start Process                 ${MY_PING_BIN}
+    ...                   -c3                           -v                     ${TEST_ADDRESS}
+    ${my_messages}=       Wait For Messages
+    ...                   count=3                       wrong_checksum=True    comparable=True
+    ${result}=            Wait For Process              ${process}
+    ${my_exit_status}=    Set Variable                  ${result.rc}
+    ${my_out}=            Remove String Using Regexp    ${result.stdout}
+    ...                   id 0x[0-9a-f]* = \\d*
+    ...                   ttl=\\d*
+    ...                   time=\\d+\\.\\d* ms
+    ...                   stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
+    Log                   my_out is: ${my_out}
+    Log                   ${result.stderr}
+
+    # Compare outputs
+    Should Be Equal       ${exit_status}                ${my_exit_status}
+    Should Be Equal       ${out}                        ${my_out}
+    Should Be Equal       ${messages}                   ${my_messages}
