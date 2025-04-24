@@ -256,8 +256,8 @@ static bool ping_validate_icmp_pkg(ping *p, uint8_t* data, size_t len, ping_pkt*
         hlen = ((struct ip*)data)->ip_hl << 2;
     }
 
-    /* Received bytes should at least be equal to the packet size */
-    if (len < hlen + sizeof(ping_pkt)) {
+    /* Received bytes should at least be equal to the icmp header */
+    if (len < hlen + sizeof(struct icmphdr)) {
         return false;
     }
 
