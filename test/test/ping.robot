@@ -19,3 +19,13 @@ Test Receiving
     ${result}=           Wait For Process    ${process}
     Log                  Stdout is: ${result.stdout}
     Log                  Stderr is: ${result.stderr}
+
+Test Receiving Wrong Payload
+    [Documentation]      Basic send and receive 3 times
+    # [Timeout]            10s
+    # ${process}=          Start Process       ${PING_BIN}    -c3    ${TEST_ADDRESS}
+    Wait For Messages    count=3             payload="cacadebaca"
+    # ${result}=           Wait For Process    ${process}
+    # Log                  Stdout is: ${result.stdout}
+    # Log                  Stderr is: ${result.stderr}
+
