@@ -24,6 +24,7 @@ class TestPingServer:
                           payload: bytes = b'',
                           icmp_type: int = ICMP_ECHO_REPLY,
                           wrong_checksum: bool = False,
+                          wrong_id: bool = False,
                           comparable: bool = False) -> str:
         ret = ""
         while count:
@@ -42,6 +43,8 @@ class TestPingServer:
                 payload = req_payload
 
             # Generate the response packet
+            if wrong_id:
+                req_id += 1
             packet = generate_message(icmp_type, wrong_checksum, req_id, req_seq, payload)
             
             # Send back the response

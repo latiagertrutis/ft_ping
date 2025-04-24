@@ -1,8 +1,9 @@
 *** Variables ***
-${LIBRARY_PATH}    ../resources
-${PING_BIN}        /ping
-${MY_PING_BIN}     /ft_ping
-${TEST_ADDRESS}    127.0.0.1
+${LIBRARY_PATH}       ../resources
+${PING_BIN}           /ping
+${MY_PING_BIN}        /ft_ping
+${TEST_ADDRESS}       127.0.0.1
+${ICMP_ECHO_REPLY}    0
 
 *** Settings ***
 Library            ${LIBRARY_PATH}/TestPingServer.py
@@ -11,6 +12,54 @@ Library            String
 
 Test Setup         Start Test Server
 Test Teardown      Stop Test Server
+
+*** Keywords ***
+Test Blocking Ping
+    [Arguments]
+    ...                       ${count}=3
+    ...                       ${icmp_type}=${ICMP_ECHO_REPLY}
+    ...                       ${wrong_id}=False
+
+    # Run inetutils ping
+    ${process}=               Start Process                 ${PING_BIN}
+    ...                       -c3                           -v               ${TEST_ADDRESS}
+    ${messages}=              Wait For Messages
+    ...                       count=${count}                comparable=True
+    ...                       icmp_type=${icmp_type}
+    ...                       wrong_id=${wrong_id}
+    Send Signal To Process    SIGINT                        ${process}
+    ${result}=                Wait For Process              ${process}
+    ${exit_status}=           Set Variable                  ${result.rc}
+    ${out}=                   Remove String Using Regexp    ${result.stdout}
+    ...                       id 0x[0-9a-f]* = \\d*
+    ...                       stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
+    Log                       out is: ${out}
+    Log                       ${result.stderr}
+
+    # Run ft_ping
+    ${process}=               Start Process                 ${MY_PING_BIN}
+    ...                       -c3                           -v               ${TEST_ADDRESS}
+    ${my_messages}=           Wait For Messages
+    ...                       count=${count}                comparable=True
+    ...                       icmp_type=${icmp_type}
+    ...                       wrong_id=${wrong_id}
+    Send Signal To Process    SIGINT                        ${process}
+    ${result}=                Wait For Process              ${process}
+    ${my_exit_status}=        Set Variable                  ${result.rc}
+    ${my_out}=                Remove String Using Regexp    ${result.stdout}
+    ...                       id 0x[0-9a-f]* = \\d*
+    ...                       stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
+    Log                       my_out is: ${my_out}
+    Log                       ${result.stderr}
+
+    # Compare outputs
+    Should Be Equal           ${exit_status}                ${my_exit_status}
+    Should Be Equal           ${out}                        ${my_out}
+    Should Be Equal           ${messages}                   ${my_messages}
+
+# Test Non Blocking Ping
+#     [Arguments]
+#     ...    
 
 *** Test Cases ***
 Test Receiving
@@ -119,39 +168,10 @@ Test Receiving Wrong Payload
     Should Be Equal       ${messages}                   ${my_messages}
 
 Test Receiving Wrong Type
-    [Documentation]           Send and receive 3 time with a wrong ICMP type
-    [Timeout]                 10s
+    [Documentation]       Send and receive 3 time with a wrong ICMP type
+    [Timeout]             10s
 
-    # Run inetutils ping
-    ${process}=               Start Process                 ${PING_BIN}
-    ...                       -c3                           -v             ${TEST_ADDRESS}
-    ${messages}=              Wait For Messages
-    ...                       count=3                       icmp_type=3    comparable=True
-    Send Signal To Process    SIGINT                        ${process}
-    ${result}=                Wait For Process              ${process}
-    ${exit_status}=           Set Variable                  ${result.rc}
-    ${out}=                   Remove String Using Regexp    ${result.stdout}
-    ...                       id 0x[0-9a-f]* = \\d*
-    ...                       stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
-    Log                       out is: ${out}
-
-    # Run ft_ping
-    ${process}=               Start Process                 ${MY_PING_BIN}
-    ...                       -c3                           -v             ${TEST_ADDRESS}
-    ${my_messages}=           Wait For Messages
-    ...                       count=3                       icmp_type=3    comparable=True
-    Send Signal To Process    SIGINT                        ${process}
-    ${result}=                Wait For Process              ${process}
-    ${my_exit_status}=        Set Variable                  ${result.rc}
-    ${my_out}=                Remove String Using Regexp    ${result.stdout}
-    ...                       id 0x[0-9a-f]* = \\d*
-    ...                       stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
-    Log                       my_out is: ${my_out}
-
-    # Compare outputs
-    Should Be Equal           ${exit_status}                ${my_exit_status}
-    Should Be Equal           ${out}                        ${my_out}
-    Should Be Equal           ${messages}                   ${my_messages}
+    Test Blocking Ping    icmp_type=42
 
 Test Receiving Wrong Checksum
     [Documentation]       Send and receive 3 time with a wrong checksum
@@ -191,3 +211,9 @@ Test Receiving Wrong Checksum
     Should Be Equal       ${exit_status}                ${my_exit_status}
     Should Be Equal       ${out}                        ${my_out}
     Should Be Equal       ${messages}                   ${my_messages}
+
+Test Receiving Wrong Id
+    [Documentation]       Send and receive 3 time with a wrong Id
+    [Timeout]             10s
+
+    Test Blocking Ping    wrong_id=True
