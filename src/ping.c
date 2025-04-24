@@ -356,6 +356,7 @@ static void ping_sigint_handler(int signal)
     done = true;
 }
 
+/* This function return will be the exit status of the program itself so error state == 1 */
 static int ping_run(ping * p, char* host)
 {
     int ret = 0;
@@ -377,7 +378,7 @@ static int ping_run(ping * p, char* host)
     /* Get the new host */
     p->dest = ping_get_host(host);
     if (p->dest == NULL) {
-        return -1;
+        return 1;
     }
 
     pfd.fd = p->fd;
@@ -392,7 +393,7 @@ static int ping_run(ping * p, char* host)
     printf ("\n");
 
     if (ping_send(p) < 0) {
-        ret = -1;
+        ret = 1;
         goto exit_clean;
     }
 
@@ -406,7 +407,7 @@ static int ping_run(ping * p, char* host)
 
         pret = poll(&pfd, 1, wait);
         if (pret < 0) {
-            ret = -1;
+            ret = 1;
             break;
         }
 
@@ -422,7 +423,7 @@ static int ping_run(ping * p, char* host)
         else {
             if (p->count == 0 || p->num_sent < p->count) {
                 if (ping_send(p) < 0) {
-                    ret = -1;
+                    ret = 1;
                     break;
                 }
             }
@@ -442,12 +443,17 @@ exit_clean:
     free(p->dest->name);
     free(p->dest);
 
+    if (p->num_recv == 0) {
+        ret = 1;
+    }
+
     return ret;
 }
 
 int main(int argc, char** argv)
 {
     int c;
+    int status = 0;
     bool verbose = false;
     double interval = PING_DEFAULT_INTERVAL;
     uint8_t pattern[PING_MAX_PATTERN] = {0};
@@ -528,14 +534,10 @@ int main(int argc, char** argv)
 
     /* Loop through all the hosts */
     for (; optind < argc; optind++) {
-        if (ping_run(p, argv[optind]) != 0) {
-            if (errno != EINTR) {
-                perror("ping_echo");
-            }
-        }
+        status |= ping_run(p, argv[optind]);
     }
 
     close(p->fd);
     free(p);
-    return EXIT_SUCCESS;
+    return status;
 }

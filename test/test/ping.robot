@@ -1,31 +1,154 @@
 *** Variables ***
 ${LIBRARY_PATH}    ../resources
-${PING_BIN}        /ft_ping
+${PING_BIN}        /ping
+${MY_PING_BIN}     /ft_ping
 ${TEST_ADDRESS}    127.0.0.1
 
 *** Settings ***
 Library            ${LIBRARY_PATH}/TestPingServer.py
 Library            Process
+Library            String
 
 Test Setup         Start Test Server
 Test Teardown      Stop Test Server
 
 *** Test Cases ***
 Test Receiving
-    [Documentation]      Basic send and receive 3 times
-    [Timeout]            10s
-    ${process}=          Start Process       ${PING_BIN}    -c3    ${TEST_ADDRESS}
-    Wait For Messages    count=3
-    ${result}=           Wait For Process    ${process}
-    Log                  Stdout is: ${result.stdout}
-    Log                  Stderr is: ${result.stderr}
+    [Documentation]       Basic send and receive 3 times
+    [Timeout]             10s
 
+    # Run inetutils ping
+    ${process}=           Start Process                 ${PING_BIN}
+    ...                   -c3                           ${TEST_ADDRESS}
+    ${messages}=          Wait For Messages             count=3    comparable=True
+    ${result}=            Wait For Process              ${process}
+    ${exit_status}=       Set Variable                  ${result.rc}
+    ${out}=               Remove String Using Regexp    ${result.stdout}
+    ...                   ttl=\\d*
+    ...                   time=\\d+\\.\\d* ms
+    ...                   stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
+    Log                   out is: ${out}
+
+    # Run ft_ping
+    ${process}=           Start Process                 ${MY_PING_BIN}
+    ...                   -c3                           ${TEST_ADDRESS}
+    ${my_messages}=       Wait For Messages             count=3    comparable=True
+    ${result}=            Wait For Process              ${process}
+    ${my_exit_status}=    Set Variable                  ${result.rc}
+    ${my_out}=            Remove String Using Regexp    ${result.stdout}
+    ...                   ttl=\\d*
+    ...                   time=\\d+\\.\\d* ms
+    ...                   stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
+    Log                   my_out is: ${my_out}
+
+    # Compare outputs
+    Should Be Equal       ${exit_status}                ${my_exit_status}
+    Should Be Equal       ${out}                        ${my_out}
+    Should Be Equal       ${messages}                   ${my_messages}
+
+Test Receiving Verbose
+    [Documentation]       Basic send and receive 3 times with verbose
+    [Timeout]             10s
+
+    # Run inetutils ping
+    ${process}=           Start Process                 ${PING_BIN}
+    ...                   -c3                           -v         ${TEST_ADDRESS}
+    ${messages}=          Wait For Messages             count=3    comparable=True
+    ${result}=            Wait For Process              ${process}
+    ${exit_status}=       Set Variable                  ${result.rc}
+    ${out}=               Remove String Using Regexp    ${result.stdout}
+    ...                   id 0x[0-9a-f]* = \\d*
+    ...                   ttl=\\d*
+    ...                   time=\\d+\\.\\d* ms
+    ...                   stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
+    Log                   out is: ${out}
+
+    # Run ft_ping
+    ${process}=           Start Process                 ${MY_PING_BIN}
+    ...                   -c3                           -v         ${TEST_ADDRESS}
+    ${my_messages}=       Wait For Messages             count=3    comparable=True
+    ${result}=            Wait For Process              ${process}
+    ${my_exit_status}=    Set Variable                  ${result.rc}
+    ${my_out}=            Remove String Using Regexp    ${result.stdout}
+    ...                   id 0x[0-9a-f]* = \\d*
+    ...                   ttl=\\d*
+    ...                   time=\\d+\\.\\d* ms
+    ...                   stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
+    Log                   my_out is: ${my_out}
+
+    # Compare outputs
+    Should Be Equal       ${exit_status}                ${my_exit_status}
+    Should Be Equal       ${out}                        ${my_out}
+    Should Be Equal       ${messages}                   ${my_messages}
+    
 Test Receiving Wrong Payload
-    [Documentation]      Basic send and receive 3 times
-    # [Timeout]            10s
-    # ${process}=          Start Process       ${PING_BIN}    -c3    ${TEST_ADDRESS}
-    Wait For Messages    count=3             payload="cacadebaca"
-    # ${result}=           Wait For Process    ${process}
-    # Log                  Stdout is: ${result.stdout}
-    # Log                  Stderr is: ${result.stderr}
+    [Documentation]       Send and receive 3 time with a wrong payload
+    [Timeout]             10s
 
+    # Run inetutils ping
+    ${process}=           Start Process                 ${PING_BIN}
+    ...                   -c3                           -v                      ${TEST_ADDRESS}
+    ${messages}=          Wait For Messages
+    ...                   count=3                       payload="cacadebaca"    comparable=True
+    ${result}=            Wait For Process              ${process}
+    ${exit_status}=       Set Variable                  ${result.rc}
+    ${out}=               Remove String Using Regexp    ${result.stdout}
+    ...                   id 0x[0-9a-f]* = \\d*
+    ...                   ttl=\\d*
+    ...                   time=\\d+\\.\\d* ms
+    ...                   stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
+    Log                   out is: ${out}
+
+    # Run ft_ping
+    ${process}=           Start Process                 ${MY_PING_BIN}
+    ...                   -c3                           -v                      ${TEST_ADDRESS}
+    ${my_messages}=       Wait For Messages
+    ...                   count=3                       payload="cacadebaca"    comparable=True
+    ${result}=            Wait For Process              ${process}
+    ${my_exit_status}=    Set Variable                  ${result.rc}
+    ${my_out}=            Remove String Using Regexp    ${result.stdout}
+    ...                   id 0x[0-9a-f]* = \\d*
+    ...                   ttl=\\d*
+    ...                   time=\\d+\\.\\d* ms
+    ...                   stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
+    Log                   my_out is: ${my_out}
+
+    # Compare outputs
+    Should Be Equal       ${exit_status}                ${my_exit_status}
+    Should Be Equal       ${out}                        ${my_out}
+    Should Be Equal       ${messages}                   ${my_messages}
+
+Test Receiving Wrong Type
+    [Documentation]           Send and receive 3 time with a wrong ICMP type
+    [Timeout]                 10s
+
+    # Run inetutils ping
+    ${process}=               Start Process                 ${PING_BIN}
+    ...                       -c3                           -v             ${TEST_ADDRESS}
+    ${messages}=              Wait For Messages
+    ...                       count=3                       icmp_type=3    comparable=True
+    Send Signal To Process    SIGINT                        ${process}
+    ${result}=                Wait For Process              ${process}
+    ${exit_status}=           Set Variable                  ${result.rc}
+    ${out}=                   Remove String Using Regexp    ${result.stdout}
+    ...                       id 0x[0-9a-f]* = \\d*
+    ...                       stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
+    Log                       out is: ${out}
+
+    # Run ft_ping
+    ${process}=               Start Process                 ${MY_PING_BIN}
+    ...                       -c3                           -v             ${TEST_ADDRESS}
+    ${my_messages}=           Wait For Messages
+    ...                       count=3                       icmp_type=3    comparable=True
+    Send Signal To Process    SIGINT                        ${process}
+    ${result}=                Wait For Process              ${process}
+    ${my_exit_status}=        Set Variable                  ${result.rc}
+    ${my_out}=                Remove String Using Regexp    ${result.stdout}
+    ...                       id 0x[0-9a-f]* = \\d*
+    ...                       stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
+    Log                       my_out is: ${my_out}
+
+    # Compare outputs
+    Should Be Equal           ${exit_status}                ${my_exit_status}
+    Should Be Equal           ${out}                        ${my_out}
+    Should Be Equal           ${messages}                   ${my_messages}

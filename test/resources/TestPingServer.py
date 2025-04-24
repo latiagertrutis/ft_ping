@@ -20,7 +20,11 @@ class TestPingServer:
         self.socket = socket.socket(socket.AF_INET,socket.SOCK_RAW,socket.IPPROTO_ICMP)
         self.socket.bind(("127.0.0.1", 0))
 
-    def wait_for_messages(self, count: int, payload: bytes = b'') -> None:
+    def wait_for_messages(self, count: int,
+                          payload: bytes = b'',
+                          icmp_type: int = ICMP_ECHO_REPLY,
+                          comparable: bool = False) -> str:
+        ret = ""
         while count:
             data, addr = self.socket.recvfrom(MAX_ICMP_PACKET_SIZE)
 
@@ -29,24 +33,27 @@ class TestPingServer:
             if req_type != ICMP_ECHO_REQUEST:
                 continue
 
-            print("=========================== RECV[%d] ===========================\n" % count)
-            pretty_print_icmp(data)
-            print("\n")
+            ret += f"=========================== RECV[{count}] ===========================\n"
+            ret += pretty_icmp_as_string(data[IP_HEADER_SIZE:], comparable)
+            ret += "\n"
 
             if payload == bytes():
                 payload = req_payload
 
             # Generate the response packet
-            packet = generate_message(ICMP_ECHO_REPLY, req_id, req_seq, payload)
+            packet = generate_message(icmp_type, req_id, req_seq, payload)
             
             # Send back the response
             self.socket.sendto(packet, addr)
 
-            print("=========================== SENT[%d] ===========================\n" % count)
-            pretty_print_icmp(packet)
-            print("\n")
+            ret += f"=========================== SENT[{count}] ===========================\n"
+            ret += pretty_icmp_as_string(packet, comparable)
+            ret += "\n"
             
             count -= 1
+
+        print(ret)
+        return ret
         
     def stop_test_server(self) -> None:
         self.socket.close()

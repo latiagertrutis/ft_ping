@@ -3,6 +3,7 @@ import textwrap
 
 ICMP_HEADER_FORMAT = "!BBHHH"  # type, code, checksum, identifier, sequence
 ICMP_HEADER_SIZE = 8
+ICMP_COMPARABLE_OFF = 16
 IP_HEADER_SIZE = 20
 
 ICMP_TYPE_DESCRIPTIONS = {
@@ -15,28 +16,34 @@ ICMP_TYPE_DESCRIPTIONS = {
     14: "Timestamp Reply",
 }
 
-def pretty_print_icmp(packet: bytes):
+def pretty_icmp_as_string(packet: bytes, comparable: bool = False) -> str:
     if len(packet) < ICMP_HEADER_SIZE:
-        print("Packet too short to be ICMP.")
-        return
+        return "Packet too short to be ICMP."
 
-    # Parse header
     icmp_type, code, checksum, identifier, sequence = struct.unpack(ICMP_HEADER_FORMAT, packet[:ICMP_HEADER_SIZE])
-    payload = packet[ICMP_HEADER_SIZE:]
 
     type_desc = ICMP_TYPE_DESCRIPTIONS.get(icmp_type, "Unknown")
 
-    print(f"\n📦 ICMP Packet (Total size: {len(packet)} bytes)\n")
-    print("==[ ICMP Header ]==")
-    print(f"Type:       {icmp_type} ({type_desc})")
-    print(f"Code:       {code}")
-    print(f"Checksum:   0x{checksum:04X}")
-    print(f"Identifier: {identifier}")
-    print(f"Sequence #: {sequence}")
+    output = []
+    output.append(f"📦 ICMP Packet (Total size: {len(packet)} bytes)\n")
+    output.append("==[ ICMP Header ]==")
+    output.append(f"Type:       {icmp_type} ({type_desc})")
+    output.append(f"Code:       {code}")
+    if comparable == False:
+        output.append(f"Checksum:   0x{checksum:04X}")
+        output.append(f"Identifier: {identifier}")
+    output.append(f"Sequence #: {sequence}")
 
+    if comparable:
+        payload = packet[ICMP_HEADER_SIZE + ICMP_COMPARABLE_OFF:]
+    else:
+        payload = packet[ICMP_HEADER_SIZE:]
+        
     if payload:
-        print("\n==[ Payload ({} bytes) ]==".format(len(payload)))
-        print(textwrap.indent(hexdump(payload), "  "))
+        output.append(f"\n==[ Payload ({len(payload)} bytes) ]==")
+        output.append(textwrap.indent(hexdump(payload), "  "))
+
+    return "\n".join(output)
 
 def hexdump(data: bytes, width: int = 16) -> str:
     lines = []
@@ -45,7 +52,7 @@ def hexdump(data: bytes, width: int = 16) -> str:
         hex_part = ' '.join(f'{b:02X}' for b in chunk)
         ascii_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
         lines.append(f"{i:04X}  {hex_part:<{width*3}}  {ascii_part}")
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 def calc_checksum(data: bytes) -> int:
     if len(data) % 2 == 1:
