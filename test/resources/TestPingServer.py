@@ -51,7 +51,7 @@ class TestPingServer:
             self.socket.sendto(packet, addr)
 
             ret += f"=========================== SENT[{count}] ===========================\n"
-            ret += pretty_icmp_as_string(packet, comparable, payload == bytes())
+            ret += pretty_icmp_as_string(packet, comparable, payload == bytes() and comparable)
             ret += "\n"
             
             count -= 1
