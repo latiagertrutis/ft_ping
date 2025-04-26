@@ -16,7 +16,8 @@ ICMP_TYPE_DESCRIPTIONS = {
     14: "Timestamp Reply",
 }
 
-def pretty_icmp_as_string(packet: bytes, comparable: bool = False) -> str:
+def pretty_icmp_as_string(packet: bytes, comparable: bool = False,
+                          payload_comparable: bool = False) -> str:
     if len(packet) < ICMP_HEADER_SIZE:
         return "Packet too short to be ICMP."
 
@@ -34,13 +35,14 @@ def pretty_icmp_as_string(packet: bytes, comparable: bool = False) -> str:
         output.append(f"Identifier: {identifier}")
     output.append(f"Sequence #: {sequence}")
 
-    if comparable:
+    if payload_comparable:
         payload = packet[ICMP_HEADER_SIZE + ICMP_COMPARABLE_OFF:]
+        output.append(f"\n==[ Payload ({len(packet[ICMP_HEADER_SIZE:])} bytes (showing trimmed version for comparison)) ]==")
     else:
         payload = packet[ICMP_HEADER_SIZE:]
+        output.append(f"\n==[ Payload ({len(payload)} bytes) ]==")
         
     if payload:
-        output.append(f"\n==[ Payload ({len(payload)} bytes) ]==")
         output.append(textwrap.indent(hexdump(payload), "  "))
 
     return "\n".join(output)

@@ -36,22 +36,22 @@ class TestPingServer:
                 continue
 
             ret += f"=========================== RECV[{count}] ===========================\n"
-            ret += pretty_icmp_as_string(data[IP_HEADER_SIZE:], comparable)
+            ret += pretty_icmp_as_string(data[IP_HEADER_SIZE:], comparable, comparable)
             ret += "\n"
 
-            if payload == bytes():
-                payload = req_payload
+            if payload != bytes():
+                req_payload = payload
 
             # Generate the response packet
             if wrong_id:
                 req_id += 1
-            packet = generate_message(icmp_type, wrong_checksum, req_id, req_seq, payload)
+            packet = generate_message(icmp_type, wrong_checksum, req_id, req_seq, req_payload)
             
             # Send back the response
             self.socket.sendto(packet, addr)
 
             ret += f"=========================== SENT[{count}] ===========================\n"
-            ret += pretty_icmp_as_string(packet, comparable)
+            ret += pretty_icmp_as_string(packet, comparable, payload == bytes())
             ret += "\n"
             
             count -= 1
