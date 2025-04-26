@@ -22,7 +22,7 @@ Test Blocking Ping
 
     # Run inetutils ping
     ${process}=               Start Process                 ${PING_BIN}
-    ...                       -c3                           -v               ${TEST_ADDRESS}
+    ...                       -c${count}                    -v    ${TEST_ADDRESS}
     ${messages}=              Wait For Messages
     ...                       count=${count}                comparable=True
     ...                       icmp_type=${icmp_type}
@@ -38,7 +38,7 @@ Test Blocking Ping
 
     # Run ft_ping
     ${process}=               Start Process                 ${MY_PING_BIN}
-    ...                       -c3                           -v               ${TEST_ADDRESS}
+    ...                       -c${count}                    -v    ${TEST_ADDRESS}
     ${my_messages}=           Wait For Messages
     ...                       count=${count}                comparable=True
     ...                       icmp_type=${icmp_type}
@@ -65,7 +65,7 @@ Test Non Blocking Ping
 
     # Run inetutils ping
     ${process}=           Start Process                 ${PING_BIN}
-    ...                   -c3                           -v                ${TEST_ADDRESS}
+    ...                   -c${count}                    -v                ${TEST_ADDRESS}
     ${messages}=          Wait For Messages             count=${count}    comparable=True
     ...                   payload=${payload}
     ...                   wrong_checksum=${wrong_checksum}
@@ -81,7 +81,7 @@ Test Non Blocking Ping
 
     # Run ft_ping
     ${process}=           Start Process                 ${MY_PING_BIN}
-    ...                   -c3                           -v                ${TEST_ADDRESS}
+    ...                   -c${count}                    -v                ${TEST_ADDRESS}
     ${my_messages}=       Wait For Messages             count=${count}    comparable=True
     ...                   payload=${payload}
     ...                   wrong_checksum=${wrong_checksum}
