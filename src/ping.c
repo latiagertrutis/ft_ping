@@ -28,8 +28,8 @@
     "  -v                 verbose output\n" \
     "  -i <interval>      interval in seconds between ping messages [default 1s]\n" \
     "  -c <count>         number of messages to send, 0 is infinity [default 0]\n" \
-    "  -p <pattern>       fill ICMP packet with given pattern (hex)" \
-    "  -t <N>             specify N as time-to-live" \
+    "  -p <pattern>       fill ICMP packet with given pattern (hex)\n" \
+    "  -t <N>             specify N as time-to-live\n" \
     "  -?                 give this help list\n"
 
 #define PING_DATALEN    (64 - sizeof(struct icmphdr))
