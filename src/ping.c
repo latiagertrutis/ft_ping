@@ -28,6 +28,8 @@
     "  -v                 verbose output\n" \
     "  -i <interval>      interval in seconds between ping messages [default 1s]\n" \
     "  -c <count>         number of messages to send, 0 is infinity [default 0]\n" \
+    "  -p <pattern>       fill ICMP packet with given pattern (hex)" \
+    "  -t <N>             specify N as time-to-live" \
     "  -?                 give this help list\n"
 
 #define PING_DATALEN    (64 - sizeof(struct icmphdr))
@@ -37,6 +39,7 @@
 #define PING_MAX_WAIT (10 * PING_MS_PER_SEC)
 #define PING_SEQMAP_SIZE 128
 #define PING_MAX_PATTERN 16
+#define PING_TTL_MAX_VAL 255
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -472,11 +475,12 @@ int main(int argc, char** argv)
     double interval = PING_DEFAULT_INTERVAL;
     uint8_t pattern[PING_MAX_PATTERN] = {0};
     int pattern_len = 0;
+    int ttl = 0;
     size_t count = 0;
     ping *p;
     char *endptr;
 
-    while ((c = getopt(argc, argv, "vi:c:p:?")) != -1) {
+    while ((c = getopt(argc, argv, "vi:c:p:t:?")) != -1) {
         switch (c) {
         case 'v':
             verbose = true;
@@ -515,6 +519,22 @@ int main(int argc, char** argv)
             }
             break;
 
+        case 't':
+            ttl = strtoul(optarg, &endptr, 0);
+            if (*endptr != '\0') {
+                fprintf(stderr, "invalid value (`%s' near `%s')\n", optarg, endptr);
+                exit (EXIT_FAILURE);
+            }
+            if (ttl == 0) {
+                fprintf (stderr, "option value too small: %s\n", optarg);
+                exit (EXIT_FAILURE);
+            }
+            if (ttl > PING_TTL_MAX_VAL) {
+                fprintf (stderr, "option value too big: %s\n", optarg);
+                exit (EXIT_FAILURE);
+            }
+            break;
+
         case '?':
             printf(HELP_STRING);
             exit(EXIT_SUCCESS);
@@ -538,11 +558,21 @@ int main(int argc, char** argv)
     if (verbose) {
         p->options |= OPT_VERBOSE;
     }
+
     if (pattern_len > 0) {
         p->options |= OPT_PATTERN;
         memcpy(p->pattern, pattern, pattern_len);
         p->pattern_len = pattern_len;
     }
+
+    if (ttl > 0) {
+        if (setsockopt(p->fd, IPPROTO_IP, IP_TTL, &ttl, sizeof(int)) < 0) {
+            status = -1;
+            fprintf(stderr, "setsockopt: %s\n", strerror(errno));
+            goto exit;
+        }
+    }
+
     p->interval = interval;
     p->count = count;
 
@@ -551,6 +581,7 @@ int main(int argc, char** argv)
         status |= ping_run(p, argv[optind]);
     }
 
+exit:
     close(p->fd);
     free(p);
     return status;
