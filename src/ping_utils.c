@@ -54,6 +54,10 @@ int ping_decode_pattern(char  *optarg, uint8_t *pattern, int len)
     int off;
     int c;
 
+    if (optarg == NULL || pattern == NULL) {
+        return -1;
+    }
+
     for (i = 0; *optarg != '\0' && i < len; i++) {
         if (sscanf(optarg, "%2x%n", &c, &off) != 1) {
             fprintf(stderr, "error in pattern near %s", optarg);

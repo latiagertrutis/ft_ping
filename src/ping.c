@@ -27,20 +27,22 @@
     "\n" \
     "Options:\n" \
     "  -v                 verbose output\n" \
+    "  -f                 flood ping (root only)\n" \
     "  -i <interval>      interval in seconds between ping messages [default 1s]\n" \
     "  -c <count>         number of messages to send, 0 is infinity [default 0]\n" \
     "  -p <pattern>       fill ICMP packet with given pattern (hex)\n" \
     "  -t <N>             specify N as time-to-live\n" \
     "  -?                 give this help list\n"
 
-#define PING_DATALEN    (64 - sizeof(struct icmphdr))
-#define PING_DEFAULT_INTERVAL 1000.0      /* Milliseconds */
-#define PING_MS_PER_SEC 1000     /* Millisecond precision */
-#define PING_MIN_INTERVAL 0.2
-#define PING_MAX_WAIT (10 * PING_MS_PER_SEC)
-#define PING_SEQMAP_SIZE 128
-#define PING_MAX_PATTERN 16
-#define PING_TTL_MAX_VAL 255
+#define PING_DATALEN			(64 - sizeof(struct icmphdr))
+#define PING_DEFAULT_INTERVAL	1000.0	/* Milliseconds */
+#define PING_MS_PER_SEC			1000	/* Millisecond precision */
+#define PING_MIN_INTERVAL		0.2
+#define PING_MAX_WAIT			(10 * PING_MS_PER_SEC)
+#define PING_SEQMAP_SIZE		128
+#define PING_MAX_PATTERN		16
+#define PING_TTL_MAX_VAL		255
+#define PING_FLOOD_WAIT			10
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -53,8 +55,10 @@
 #endif
 
 /* Ping options */
-#define OPT_VERBOSE 0x01
-#define OPT_PATTERN 0x02
+#define OPT_VERBOSE		0x01
+#define OPT_PATTERN		0x02
+#define OPT_FLOOD		0x04
+#define OPT_INTERVAL	0x08
 
 typedef struct ping_pkt_s {
     struct icmphdr hdr;
@@ -151,8 +155,8 @@ close_return:
  * data being random numbers. This I understand is just made as undefined
  * behavior, and I preferred to set ttl to 0 instead.
  */
-static void ping_print_echo(bool dupflag, struct sockaddr_in *from, struct ip *ip,
-                            ping_stat *stat, ping_pkt *pkt, int len)
+static void ping_print_echo(bool dupflag, bool flood, struct sockaddr_in *from,
+                            struct ip *ip, ping_stat *stat, ping_pkt *pkt, int len)
 {
     bool timing = false;
     double triptime = 0.0;
@@ -183,6 +187,11 @@ static void ping_print_echo(bool dupflag, struct sockaddr_in *from, struct ip *i
         if (triptime > stat->tmax) {
             stat->tmax = triptime;
         }
+    }
+
+    if (flood) {
+        putchar('\b');
+        return;
     }
 
     printf ("%d bytes from %s: icmp_seq=%u", len,
@@ -354,7 +363,7 @@ static ssize_t ping_recv(ping *p)
     if (p->is_dgram == false) {
         ip = (struct ip*)recv_buff;
     }
-    ping_print_echo(dupflag, &from, ip, &p->stat, pkt, bytes);
+    ping_print_echo(dupflag, p->options & OPT_FLOOD, &from, ip, &p->stat, pkt, bytes);
 
     return bytes;
 
@@ -415,7 +424,14 @@ static int ping_run(ping * p, char* host)
     signal(SIGINT, ping_sigint_handler);
 
     finishing = false;
-    wait = p->interval;
+
+    if (p->options & OPT_FLOOD) {
+        wait = PING_FLOOD_WAIT;
+    }
+    else {
+        wait = p->interval;
+    }
+
     while (!done) {
         uint16_t chksum;
         int pret;
@@ -446,6 +462,9 @@ static int ping_run(ping * p, char* host)
                     ret = 1;
                     break;
                 }
+                if (p->options & OPT_FLOOD) {
+                    putchar('.');
+                }
             }
             else if (finishing) {
                 break;
@@ -475,6 +494,7 @@ int main(int argc, char** argv)
     int c;
     int status = 0;
     bool verbose = false;
+    bool flood = false;
     double interval = PING_DEFAULT_INTERVAL;
     uint8_t pattern[PING_MAX_PATTERN] = {0};
     int pattern_len = 0;
@@ -483,10 +503,14 @@ int main(int argc, char** argv)
     ping *p;
     char *endptr;
 
-    while ((c = getopt(argc, argv, "vi:c:p:t:?")) != -1) {
+    while ((c = getopt(argc, argv, "vfi:c:p:t:?")) != -1) {
         switch (c) {
         case 'v':
             verbose = true;
+            break;
+
+        case 'f':
+            flood = true;
             break;
 
         case 'i':
@@ -561,6 +585,15 @@ int main(int argc, char** argv)
         p->options |= OPT_VERBOSE;
     }
 
+    if (flood) {
+        p->options |= OPT_FLOOD;
+    }
+
+    if (interval != PING_DEFAULT_INTERVAL) {
+        p->options |= OPT_INTERVAL;
+    }
+    p->interval = interval;
+
     if (pattern_len > 0) {
         p->options |= OPT_PATTERN;
         memcpy(p->pattern, pattern, pattern_len);
@@ -569,14 +602,20 @@ int main(int argc, char** argv)
 
     if (ttl > 0) {
         if (setsockopt(p->fd, IPPROTO_IP, IP_TTL, &ttl, sizeof(int)) < 0) {
-            status = -1;
+            status = 1;
             fprintf(stderr, "setsockopt: %s\n", strerror(errno));
             goto exit;
         }
     }
 
-    p->interval = interval;
     p->count = count;
+
+    /* Check option errors */
+    if (p->options & OPT_FLOOD && p->options & OPT_INTERVAL) {
+        status = 1;
+        fprintf(stderr, "-f and -i incompatible options\n");
+        goto exit;
+    }
 
     /* Loop through all the hosts */
     for (; optind < argc; optind++) {

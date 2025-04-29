@@ -84,8 +84,10 @@ Test Non Blocking Ping
     ...                   stddev = \\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d*/\\d+\\.\\d* ms
     Log                   out is: ${out}
     Log                   ${result.stderr}
+    Stop Test Server
 
     # Run ft_ping
+    Start Test Server
     ${process}=           Start Process                 ${MY_PING_BIN}
     ...                   @{command_arguments}
     ${my_messages}=       Wait For Messages             count=${count}           comparable=True
@@ -178,3 +180,21 @@ Test Receiving Wrong Id
     [Timeout]             10s
 
     Test Blocking Ping    -c3    -v    ${TEST_ADDRESS}    wrong_id=True
+
+Test Flood
+    [Documentation]           Send and receive 1042 messages with flood
+    [Timeout]                 60s
+
+    Test Non Blocking Ping    -c1042    -v    -f    ${TEST_ADDRESS}    count=1042
+
+Test Flood With No Responses
+    [Documentation]           Send and receive 42 messages with flood
+    [Timeout]                 60s
+
+    Test Non Blocking Ping    -c42    -v    -f    ${TEST_ADDRESS}    count=3
+
+Test Wrong Flood Options
+    [Documentation]           Test incompatible -i and -f flags
+    [Timeout]                 10s
+
+    Test Non Blocking Ping    -c1042    -v    -f    -i42    ${TEST_ADDRESS}    count=0
