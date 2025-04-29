@@ -17,6 +17,7 @@
 #include <poll.h>
 #include <math.h>
 #include <signal.h>
+#include <sysexits.h>
 
 #include "ping_utils.h"
 
@@ -421,7 +422,9 @@ static int ping_run(ping * p, char* host)
 
         pret = poll(&pfd, 1, wait);
         if (pret < 0) {
-            ret = 1;
+            if (errno != EINTR) {
+                ret = 1;
+            }
             break;
         }
 
@@ -490,11 +493,11 @@ int main(int argc, char** argv)
             interval = strtod(optarg, &endptr);
             if (*endptr != '\0') {
                 fprintf(stderr, "invalid value (`%s' near `%s')\n", optarg, endptr);
-                exit (EXIT_FAILURE);
+                exit (EX_USAGE);
             }
             if (interval < PING_MIN_INTERVAL) {
                 fprintf (stderr, "option value too small: %s\n", optarg);
-                exit (EXIT_FAILURE);
+                exit (EX_USAGE);
             }
             interval *= PING_MS_PER_SEC;
             break;
@@ -503,11 +506,7 @@ int main(int argc, char** argv)
             count = strtoul(optarg, &endptr, 0);
             if (*endptr != '\0') {
                 fprintf(stderr, "invalid value (`%s' near `%s')\n", optarg, endptr);
-                exit (EXIT_FAILURE);
-            }
-            if (count == 0) {
-                fprintf (stderr, "option value too small: %s\n", optarg);
-                exit (EXIT_FAILURE);
+                exit (EX_USAGE);
             }
             break;
 
@@ -515,7 +514,7 @@ int main(int argc, char** argv)
             pattern_len = ping_decode_pattern(optarg, pattern, ARRAY_SIZE(pattern));
             if (pattern_len < 0) {
                 fprintf(stderr, "invalid value near `%s'\n", optarg);
-                exit (EXIT_FAILURE);
+                exit (EX_USAGE);
             }
             break;
 
@@ -523,19 +522,22 @@ int main(int argc, char** argv)
             ttl = strtoul(optarg, &endptr, 0);
             if (*endptr != '\0') {
                 fprintf(stderr, "invalid value (`%s' near `%s')\n", optarg, endptr);
-                exit (EXIT_FAILURE);
+                exit (EX_USAGE);
             }
             if (ttl == 0) {
                 fprintf (stderr, "option value too small: %s\n", optarg);
-                exit (EXIT_FAILURE);
+                exit (EX_USAGE);
             }
             if (ttl > PING_TTL_MAX_VAL) {
                 fprintf (stderr, "option value too big: %s\n", optarg);
-                exit (EXIT_FAILURE);
+                exit (EX_USAGE);
             }
             break;
 
         case '?':
+            if (optopt != '?') {
+                exit (EX_USAGE);
+            }
             printf(HELP_STRING);
             exit(EXIT_SUCCESS);
         }
@@ -544,7 +546,7 @@ int main(int argc, char** argv)
     if (optind >= argc) {
         fprintf(stderr, "missing host operand\n");
         fprintf(stderr, "Try '%s -?' for more information.\n", argv[0]);
-        exit (EXIT_FAILURE);
+        exit (EX_USAGE);
     }
 
     /* Initialize ping structure */
