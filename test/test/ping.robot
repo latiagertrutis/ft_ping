@@ -106,14 +106,26 @@ Test Receiving Verbose
     Process Ping Outputs    ${result}          ${my_result}
     ...                     ${messages}        ${my_messages}
 
-Test Receiving With Custom Payload
-    [Documentation]         Basic send and receive 3 times with a custom payload
+Test Receiving With Pattern
+    [Documentation]         Basic send and receive 3 times with a custom pattern
     [Timeout]               10s
 
     ${result}               ${messages}=       Test Non Blocking Ping
     ...                     ${PING_BIN}        -c3    -v    -pcacadebaca    ${TEST_ADDRESS}
     ${my_result}            ${my_messages}=    Test Non Blocking Ping
     ...                     ${MY_PING_BIN}     -c3    -v    -pcacadebaca    ${TEST_ADDRESS}
+
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
+
+Test Receiving With Wrong Pattern
+    [Documentation]         Basic send and receive 3 times with a custom pattern
+    [Timeout]               10s
+
+    ${result}               ${messages}=       Test Non Blocking Ping
+    ...                     ${PING_BIN}        -c3    -v    -pmuuu    ${TEST_ADDRESS}    count=${0}
+    ${my_result}            ${my_messages}=    Test Non Blocking Ping
+    ...                     ${MY_PING_BIN}     -c3    -v    -pmuuu    ${TEST_ADDRESS}    count=${0}
 
     Process Ping Outputs    ${result}          ${my_result}
     ...                     ${messages}        ${my_messages}
@@ -260,6 +272,32 @@ Test Wrong Flood Options
     ${my_result}            ${my_messages}=    Test Non Blocking Ping
     ...                     ${MY_PING_BIN}     -c1042    -v    -f    -i42
     ...                     ${TEST_ADDRESS}    count=0
+
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
+
+Test Set Very Small TTL
+    [Documentation]         Send and receive 3 with a very small ttl
+    [Timeout]               10s
+
+    ${result}               ${messages}=       Test Non Blocking Ping
+    ...                     ${PING_BIN}        -c3    -v    --ttl=1    ${TEST_ADDRESS}
+    ${my_result}            ${my_messages}=    Test Non Blocking Ping
+    ...                     ${MY_PING_BIN}     -c3    -v    -t1        ${TEST_ADDRESS}
+
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
+
+Test Set Wrong TTL
+    [Documentation]         Send and receive 3 with a wrong ttl
+    [Timeout]               10s
+
+    ${result}               ${messages}=       Test Non Blocking Ping
+    ...                     ${PING_BIN}        -c3    -v    --ttl=500
+    ...                     ${TEST_ADDRESS}    count=${0}
+    ${my_result}            ${my_messages}=    Test Non Blocking Ping
+    ...                     ${MY_PING_BIN}     -c3    -v    -t500    
+    ...                     ${TEST_ADDRESS}    count=${0}
 
     Process Ping Outputs    ${result}          ${my_result}
     ...                     ${messages}        ${my_messages}

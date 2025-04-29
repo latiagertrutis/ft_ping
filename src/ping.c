@@ -538,7 +538,7 @@ int main(int argc, char** argv)
             pattern_len = ping_decode_pattern(optarg, pattern, ARRAY_SIZE(pattern));
             if (pattern_len < 0) {
                 fprintf(stderr, "invalid value near `%s'\n", optarg);
-                exit (EX_USAGE);
+                exit (EXIT_FAILURE);
             }
             break;
 
@@ -546,15 +546,15 @@ int main(int argc, char** argv)
             ttl = strtoul(optarg, &endptr, 0);
             if (*endptr != '\0') {
                 fprintf(stderr, "invalid value (`%s' near `%s')\n", optarg, endptr);
-                exit (EX_USAGE);
+                exit (EXIT_FAILURE);
             }
             if (ttl == 0) {
                 fprintf (stderr, "option value too small: %s\n", optarg);
-                exit (EX_USAGE);
+                exit (EXIT_FAILURE);
             }
             if (ttl > PING_TTL_MAX_VAL) {
                 fprintf (stderr, "option value too big: %s\n", optarg);
-                exit (EX_USAGE);
+                exit (EXIT_FAILURE);
             }
             break;
 
