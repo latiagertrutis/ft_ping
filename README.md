@@ -12,7 +12,7 @@ In order to build and give network capabilities to the binary run:
 make USE_RAW_SOCKET=true
 ```
 
-This implementation contains the following feature as command line options:
+This implementation contains the following features as command line options:
 ```bash
 $ ./ft_ping -?
 Usage: ft_ping [OPTION...] HOST ...
@@ -31,7 +31,7 @@ Options:
 
 ## Testing
 
-For testing I have created a battery of "black box" test that will compare the **exit status**, **standard output**, and **messages sent and received**.
+For testing I have created a battery of "black box" tests that will compare the **exit status**, **standard output**, and **messages sent and received** between my implementation and the original one.
 
 The test is implemented using [Robot Framework](https://robotframework.org/), which will run inside a docker container in order to isolate the test environment. Messages will be sent to `127.0.0.1` (localhost) which has been previously configured to not respond automatically to ICMP messages.
 
