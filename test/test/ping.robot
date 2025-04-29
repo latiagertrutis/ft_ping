@@ -27,8 +27,7 @@ Test Blocking Ping
     Send Signal To Process    SIGINT              ${process}
     ${result}=                Wait For Process    ${process}
     Stop Test Server
-    RETURN                    ${result.rc}        ${result.stdout}
-    ...                       ${result.stderr}    ${messages}
+    RETURN                    ${result}           ${messages}
 
 Test Non Blocking Ping
     [Arguments]
@@ -119,74 +118,148 @@ Test Receiving With Custom Payload
     Process Ping Outputs    ${result}          ${my_result}
     ...                     ${messages}        ${my_messages}
 
-# Test Receiving No Host
-#     [Documentation]       Basic send and receive 3 times with no host
-#     [Timeout]             10s
+Test Receiving No Host
+    [Documentation]         Basic send and receive 3 times with no host
+    [Timeout]               10s
 
-#     Test Non Blocking Ping    -c3    -v    count=${0}
+    ${result}               ${messages}=       Test Non Blocking Ping
+    ...                     ${PING_BIN}        -c3    -v    count=${0}
+    ${my_result}            ${my_messages}=    Test Non Blocking Ping
+    ...                     ${MY_PING_BIN}     -c3    -v    count=${0}
 
-# Test Receiving Invalid Option
-#     [Documentation]           Basic send and receive 3 times with invalid option
-#     [Timeout]                 10s
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
 
-#     Test Non Blocking Ping    -c3    -v    -x    count=${0}
+Test Receiving Invalid Option
+    [Documentation]         Basic send and receive 3 times with invalid option
+    [Timeout]               10s
 
-# Test Receiving Invalid Interval
-#     [Documentation]           Basic send and receive 3 times with invalid interval
-#     [Timeout]                 10s
+    ${result}               ${messages}=       Test Non Blocking Ping
+    ...                     ${PING_BIN}        -c3    -v    -x    count=${0}
+    ${my_result}            ${my_messages}=    Test Non Blocking Ping
+    ...                     ${MY_PING_BIN}     -c3    -v    -x    count=${0}
 
-#     Test Non Blocking Ping    -c3    -v    -i0    count=${0}
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
 
-# Test Receiving Wrong Host
-#     [Documentation]       Send and receive 3 time with an unreachable host
-#     [Timeout]             10s
+Test Receiving Invalid Interval
+    [Documentation]         Basic send and receive 3 times with invalid interval
+    [Timeout]               10s
 
-#     Test Blocking Ping    -c3    -v    192.0.2.1    count=${0}
+    ${result}               ${messages}=       Test Non Blocking Ping
+    ...                     ${PING_BIN}        -c3    -v    -i0    count=${0}
+    ${my_result}            ${my_messages}=    Test Non Blocking Ping
+    ...                     ${MY_PING_BIN}     -c3    -v    -i0    count=${0}
 
-# Test Receiving Infinite Setting Count To 0
-#     [Documentation]       Send and receive infinite times by setting count to 0
-#     [Timeout]             10s
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
 
-#     Test Blocking Ping    -c0    -v    ${TEST_ADDRESS}
+Test Receiving Wrong Host
+    [Documentation]         Send and receive 3 time with an unreachable host
+    [Timeout]               10s
 
-# Test Receiving Wrong Payload
-#     [Documentation]           Send and receive 3 time with a wrong payload
-#     [Timeout]                 10s
+    ${result}               ${messages}=       Test Blocking Ping
+    ...                     ${PING_BIN}        -c3    -v           192.0.2.1    count=${0}
+    ${my_result}            ${my_messages}=    Test Blocking Ping
+    ...                     ${MY_PING_BIN}     -c3    -v           192.0.2.1    count=${0}
 
-#     Test Non Blocking Ping    -c3    -v    ${TEST_ADDRESS}    payload=cacadebaca
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
 
-# Test Receiving Wrong Type
-#     [Documentation]       Send and receive 3 time with a wrong ICMP type
-#     [Timeout]             10s
+Test Receiving Infinite Setting Count To 0
+    [Documentation]         Send and receive infinite times by setting count to 0
+    [Timeout]               10s
 
-#     Test Blocking Ping    -c3    -v    ${TEST_ADDRESS}    icmp_type=42
+    ${result}               ${messages}=       Test Blocking Ping
+    ...                     ${PING_BIN}        -c0    -v    ${TEST_ADDRESS}
+    ${my_result}            ${my_messages}=    Test Blocking Ping
+    ...                     ${MY_PING_BIN}     -c0    -v    ${TEST_ADDRESS}
 
-# Test Receiving Wrong Checksum
-#     [Documentation]           Send and receive 3 time with a wrong checksum
-#     [Timeout]                 10s
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
 
-#     Test Non Blocking Ping    -c3    -v    ${TEST_ADDRESS}    wrong_checksum=True
+Test Receiving Wrong Payload
+    [Documentation]         Send and receive 3 time with a wrong payload
+    [Timeout]               10s
 
-# Test Receiving Wrong Id
-#     [Documentation]       Send and receive 3 time with a wrong Id
-#     [Timeout]             10s
+    ${result}               ${messages}=       Test Non Blocking Ping
+    ...                     ${PING_BIN}        -c3    -v    ${TEST_ADDRESS}    payload=cacadebaca
+    ${my_result}            ${my_messages}=    Test Non Blocking Ping
+    ...                     ${MY_PING_BIN}     -c3    -v    ${TEST_ADDRESS}    payload=cacadebaca
 
-#     Test Blocking Ping    -c3    -v    ${TEST_ADDRESS}    wrong_id=True
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
 
-# Test Flood
-#     [Documentation]           Send and receive 1042 messages with flood
-#     [Timeout]                 60s
+Test Receiving Wrong Type
+    [Documentation]         Send and receive 3 time with a wrong ICMP type
+    [Timeout]               10s
 
-#     Test Non Blocking Ping    -c1042    -v    -f    ${TEST_ADDRESS}    count=1042
+    ${result}               ${messages}=       Test Blocking Ping
+    ...                     ${PING_BIN}        -c3    -v    ${TEST_ADDRESS}    icmp_type=42
+    ${my_result}            ${my_messages}=    Test Blocking Ping
+    ...                     ${MY_PING_BIN}     -c3    -v    ${TEST_ADDRESS}    icmp_type=42
 
-# Test Flood With No Responses
-#     [Documentation]           Send and receive 42 messages with flood
-#     [Timeout]                 60s
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
 
-#     Test Non Blocking Ping    -c42    -v    -f    ${TEST_ADDRESS}    count=3
+Test Receiving Wrong Checksum
+    [Documentation]         Send and receive 3 time with a wrong checksum
+    [Timeout]               10s
 
-# Test Wrong Flood Options
-#     [Documentation]           Test incompatible -i and -f flags
-#     [Timeout]                 10s
+    ${result}               ${messages}=       Test Non Blocking Ping
+    ...                     ${PING_BIN}        -c3    -v    ${TEST_ADDRESS}    wrong_checksum=True
+    ${my_result}            ${my_messages}=    Test Non Blocking Ping
+    ...                     ${MY_PING_BIN}     -c3    -v    ${TEST_ADDRESS}    wrong_checksum=True
 
-#     Test Non Blocking Ping    -c1042    -v    -f    -i42    ${TEST_ADDRESS}    count=0
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
+
+Test Receiving Wrong Id
+    [Documentation]       Send and receive 3 time with a wrong Id
+    [Timeout]             10s
+
+    ${result}               ${messages}=       Test Blocking Ping
+    ...                     ${PING_BIN}        -c3    -v    ${TEST_ADDRESS}    wrong_id=True
+    ${my_result}            ${my_messages}=    Test Blocking Ping
+    ...                     ${MY_PING_BIN}     -c3    -v    ${TEST_ADDRESS}    wrong_id=True
+
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
+
+Test Flood
+    [Documentation]         Send and receive 1042 messages with flood
+    [Timeout]               60s
+
+    ${result}               ${messages}=       Test Non Blocking Ping
+    ...                     ${PING_BIN}        -c1042    -v    -f    ${TEST_ADDRESS}    count=1042
+    ${my_result}            ${my_messages}=    Test Non Blocking Ping
+    ...                     ${MY_PING_BIN}     -c1042    -v    -f    ${TEST_ADDRESS}    count=1042
+
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
+
+Test Flood With No Responses
+    [Documentation]         Send and receive 42 messages with flood
+    [Timeout]               60s
+
+    ${result}               ${messages}=       Test Non Blocking Ping
+    ...                     ${PING_BIN}        -c42    -v    -f    ${TEST_ADDRESS}    count=3
+    ${my_result}            ${my_messages}=    Test Non Blocking Ping
+    ...                     ${MY_PING_BIN}     -c42    -v    -f    ${TEST_ADDRESS}    count=3
+
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
+
+Test Wrong Flood Options
+    [Documentation]         Test incompatible -i and -f flags
+    [Timeout]               10s
+
+    ${result}               ${messages}=       Test Non Blocking Ping
+    ...                     ${PING_BIN}        -c1042    -v    -f    -i42
+    ...                     ${TEST_ADDRESS}    count=0
+    ${my_result}            ${my_messages}=    Test Non Blocking Ping
+    ...                     ${MY_PING_BIN}     -c1042    -v    -f    -i42
+    ...                     ${TEST_ADDRESS}    count=0
+
+    Process Ping Outputs    ${result}          ${my_result}
+    ...                     ${messages}        ${my_messages}
