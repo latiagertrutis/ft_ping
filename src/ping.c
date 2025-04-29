@@ -535,7 +535,7 @@ int main(int argc, char** argv)
             break;
 
         case '?':
-            if (optopt != '?') {
+            if (optopt && optopt != '?') {
                 exit (EX_USAGE);
             }
             printf(HELP_STRING);
