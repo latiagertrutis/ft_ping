@@ -1,4 +1,4 @@
-.PHONY: all clean distclean test
+.PHONY: all clean distclean test re
 
 TARGET = ft_ping
 
