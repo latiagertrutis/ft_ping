@@ -1,0 +1,102 @@
+* Robot 101
+
+Introduction to Robot Framework
+
+[[https://robotframework.org/]]
+
+[[file:img/robot-framework-logo.png]]
+
+* What is Robot Framework?
+
+** Is a test automation framework
+
+- Suited for "black box" integration testing
+
+** Human-like keywords to create tests
+
+- Helps non-technical crew to create tests
+
+** Runs over python
+
+- Test cases with the full potential of the python language
+- Can also work with other languages
+
+*  Keyword-driven syntax
+
+Cases are written using simple keywords.
+
+#+begin_src robot
+Valid Login
+    Open Browser To Login Page
+    Input Username    demo
+    Input Password    mode
+    Submit Credentials
+    Welcome Page Should Be Open
+    [Teardown]    Close Browser
+#+end_src
+
+* High-level keywords
+
+Keywords can either be imported from a library or created.
+
+Basic keywords can be used to create more complex ones.
+
+#+begin_src robot
+Open Browser To Login Page
+    Open Browser    ${LOGIN URL}    ${BROWSER}
+    Maximize Browser Window
+    Set Selenium Speed    ${DELAY}
+    Login Page Should Be Open
+
+Login Page Should Be Open
+    Title Should Be    Login Page
+
+Input Username
+    [Arguments]    ${username}
+    Input Text    username_field    ${username}
+
+Input Password
+    [Arguments]    ${password}
+    Input Text    password_field    ${password}  
+#+end_src
+
+* Low-level keywords
+
+Python can be used to create complex keywords.
+
+The example bellow will create ~Input Text~ and ~Title Should Be~.
+
+#+begin_src python
+    def input_text(self, locator, text):
+        element = self._element_find(locator)
+        element.clear()
+        element.send_keys(text)
+
+    def title_should_be(self, title):
+        actual = self.get_title()
+        if actual != title:
+            raise AssertionError("Title should have been '%s' but was '%s'."
+                                 % (title, actual))
+#+end_src
+
+* Allows Gherkin syntax
+
+Allows wrapping up into Gherkin syntax.
+
+Useful for non-technical users.
+
+#+begin_src robot
+Valid Login
+    Given browser is opened to login page
+    When user "demo" logs in with password "mode"
+    Then welcome page should be open
+#+end_src
+
+
+* Fancy reports
+
+- Outputs clear reports in html format
+- Parseable by tools like ~GitLab CI/CD~
+- Clear log details in each keyword
+
+[[file:img/report-fail.png]] [[file:img/report-pass.png]]
