@@ -20,7 +20,7 @@ endif
 
 %.d: %.c
 	@set -e; rm -f $@; \
-	$(CC) -MM -MT '$(@:.d=.o)' $(CPPFLAGS) $< > $@.$$$$; \
+	$(CC) -MP -MM -MT '$(@:.d=.o)' $(CPPFLAGS) $< > $@.$$$$; \
 	sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
 	rm -f $@.$$$$
 
